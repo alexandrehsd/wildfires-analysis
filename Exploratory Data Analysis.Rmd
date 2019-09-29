@@ -1,0 +1,241 @@
+---
+title: "WildFires Analysis - Exploratory Data Analysis"
+output: html_notebook
+
+---
+
+```{r warning=FALSE}
+# Loading packages
+library(pryr) # Memory usage information
+library(lubridate) # date manipulation
+library(dplyr) # data manipulation 
+library(ggplot2) # graphics
+library(plotly)
+library(stringr)
+library(stringi) # remove diacritics
+library(ggfortify)
+library(ggthemes)
+library(brazilmaps)
+```
+
+
+There are 4 csv files containing data about the fires of all ocurrences around all brazilian territory. Each file has data between 1st Sept to 31th Aug of each year from 2015 to 2019.
+
+```{r}
+temp <- list.files(path = "./database" ,pattern = "*.csv")
+myfiles = lapply(paste0("./database/",temp), read.csv)
+
+nrecords <- lapply(myfiles, nrow)
+totalNo <- sum(unlist(nrecords))
+
+data <- bind_rows(myfiles)
+names(data)
+
+df <- data
+
+object_size(df)
+```
+
+there are 767.695 observations in our dataset which sums up to 59.5 MB of storaged data.
+
+```{r}
+head(df)
+```
+
+```{r}
+str(df)
+```
+
+Aparentemente, A coluna de área industrial e FRP tem poucas entradas não nulas
+
+```{r}
+# paste("Percentage of NAs entries on `FRP` =",
+#       100*sum(is.na(df$frp))/totalNo)
+
+wetDays <- df$diasemchuva <= 10
+dryDays <- df$diasemchuva > 10
+noWeatherInfo <- is.na(df$diasemchuva)
+
+paste("Percentage of NAs entries on `diasemchuva` =",
+      round(100*(sum(noWeatherInfo))/totalNo,2))
+
+paste("Percentage of records with less than (or equal to) 10 days of no rain =",
+      round(100*(sum(wetDays, na.rm = T))/totalNo,2))
+
+paste("Percentage of records with more than 10 days of no rain =",
+      round(100*(sum(dryDays, na.rm = T))/totalNo,2))
+```
+
+By the last results, it is possible that the number of days with no rain have a huge impact over the fires triggers.
+
+we can also investigate another columns that have either redundant data or not useful data.
+
+```{r}
+levels(df$pais)
+df$pais <- NULL
+
+object_size(df)
+```
+
+By looking at the structure of our dataframe, it becomes clear that the `Datahora` is a datetime object not a Factor.
+
+```{r}
+df$datahora <- ymd_hms(str_replace_all(df$datahora,"/","-"))
+
+levels(df$bioma)
+```
+
+We have 6 distincts biomas on our dataset. Perhaps, by knowing how is the distribution of fires among different biomas, we can refine our research.
+
+```{r}
+counts <- table(df$bioma)
+counts
+
+proportions <- 100*counts / sum(counts)
+proportions
+```
+
+As we can see, Amazonia represents around half of our dataset. In addition, the number of fire occurrences is very much like the proportion of land that each bioma has in brazilian territory.
+
+```{r, fig.width = 4, fig.height= 3}
+ggplot(df) + 
+    geom_bar(aes(x = bioma, y = 100*..prop.., group = 1)) +
+    coord_flip()
+```
+
+
+```{r}
+
+df %>% 
+  mutate(year_month = str_c(format(datahora, "%y/%m"))) %>% 
+  group_by(year_month, bioma) %>% 
+  summarise(n_fires = n()) %>% 
+  ggplot(aes(x = year_month, y = n_fires/1000)) +
+  geom_bar(aes(fill = bioma), stat = 'identity') + 
+    labs(x = '', y = 'Number of wildfires (thousands)', title = 'Brazilian Wildfires by Year') +
+    coord_flip()
+
+```
+
+```{r}
+map_obj <- get_brmap(geo = c("State"),
+geo.filter = NULL,
+class = c("sf", "SpatialPolygonsDataFrame", "data.frame"))
+names(map_obj)<- c("estado", "codigo", "regiao", "geometry")
+
+# plot_brmap(map_obj)
+```
+
+In order to plot the number of fires by state, we must do some data wrangling to put the data in the desired format.
+
+
+```{r}
+maps_df <- list()
+for (i in 1:nrow(map_obj)) {
+
+  geo_length <- length(unlist(map_obj$geometry[i]))
+  geo_data <- unlist(map_obj$geometry[i])
+  
+  maps_df[[i]] <- as_tibble(
+    list(
+      estado = rep(stri_trans_general(map_obj$estado[i],"Latin-ASCII"), geo_length/2),
+      codigo = rep(map_obj$codigo[i], geo_length/2),
+      regiao = rep(map_obj$regiao[i], geo_length/2),
+      longitude = geo_data[1:(geo_length/2)],
+      latitude = geo_data[(1 + geo_length/2):geo_length]
+    )
+  )
+}
+
+map_df <- bind_rows(maps_df)
+map_df <- map_df %>% filter(latitude > -40, longitude < -30)
+
+# maps_df$order <- rep(1:nrow(maps_df))
+
+```
+
+
+```{r}
+# the `estado` column of the map dataframe is a character, so in order
+# to avoid coertion from factor to character, let's convert it explicitly
+df$estado <- as.character(df$estado)
+```
+
+
+```{r}
+
+df %>% 
+  select(estado) %>% 
+  group_by(estado) %>% 
+  summarise(n = n()) %>% 
+  right_join(map_df, by = 'estado') %>% 
+  ggplot(aes(x = longitude, y = latitude, group = codigo, fill = n)) + 
+    geom_polygon() + 
+    geom_path(color = 'white') + 
+    scale_fill_continuous(low = "orange", 
+                          high = "darkred",
+                          name = 'Number of fires') 
+
+
+# fires %>% 
+#     select(region) %>%
+#     group_by(region) %>%
+#     summarize(n = n()) %>%
+#     right_join(map_obj, by = 'region') %>%
+#     ggplot(aes(x = long, y = lat, group = group, fill = n)) + 
+#     geom_polygon() + 
+#     geom_path(color = 'white') + 
+#     scale_fill_continuous(low = "orange", 
+#                           high = "darkred",
+#                           name = 'Number of fires')
+    # theme_map() +
+    # coord_map('albers', lat0=30, lat1=40) +
+    # ggtitle("US Wildfires, 1992-2015") +
+    # theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+
+
+
+```{r}
+# first map of Brazil -----------------------------------------------------
+
+mapa <- borders("world", regions = "Brazil", fill = "grey70", colour = "black")
+
+brazil <- ggplot() + mapa + theme_bw() + xlab("Longitude (decimals)") + ylab("Latitude (decimals)") + 
+  theme(panel.border = element_blank(), panel.grid.major = element_line(colour = "grey80"), panel.grid.minor = element_blank())
+brazil
+```
+
+
+```{r}
+# map of Brazil + states --------------------------------------------------
+
+estados <- readShapePoly("./BRA_adm/BRA_adm1.shp")
+estados1 <- fortify(estados)
+head(estados1)
+
+ estados1 %>% ggplot(aes(x = long, y = lat, group = id)) + 
+    geom_polygon() + 
+    geom_path(color = 'white') 
+View(estados1)
+# 
+# br_est <- brazil + geom_path(data = estados1, aes(x = long, y = lat, group = group), colour = "black")
+# br_est
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
