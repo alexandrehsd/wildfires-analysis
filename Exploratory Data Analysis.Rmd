@@ -1,7 +1,6 @@
 ---
 title: "WildFires Analysis - Exploratory Data Analysis"
 output: html_notebook
-
 ---
 
 ```{r warning=FALSE}
@@ -14,8 +13,7 @@ library(plotly)
 library(stringr)
 library(stringi) # remove diacritics
 library(ggfortify)
-library(ggthemes)
-library(brazilmaps)
+library(rjson)
 ```
 
 
@@ -117,41 +115,43 @@ df %>%
 
 ```
 
-```{r}
-map_obj <- get_brmap(geo = c("State"),
-geo.filter = NULL,
-class = c("sf", "SpatialPolygonsDataFrame", "data.frame"))
-names(map_obj)<- c("estado", "codigo", "regiao", "geometry")
-
-# plot_brmap(map_obj)
-```
-
 In order to plot the number of fires by state, we must do some data wrangling to put the data in the desired format.
 
-
 ```{r}
+
+is.odd <- function(x) x %% 2 != 0
+is.even <- function(x) x %% 2 == 0
+
+geo_data <- fromJSON(file = "./geo_data/geo_data.json")
+
 maps_df <- list()
-for (i in 1:nrow(map_obj)) {
-
-  geo_length <- length(unlist(map_obj$geometry[i]))
-  geo_data <- unlist(map_obj$geometry[i])
-  
-  maps_df[[i]] <- as_tibble(
-    list(
-      estado = rep(stri_trans_general(map_obj$estado[i],"Latin-ASCII"), geo_length/2),
-      codigo = rep(map_obj$codigo[i], geo_length/2),
-      regiao = rep(map_obj$regiao[i], geo_length/2),
-      longitude = geo_data[1:(geo_length/2)],
-      latitude = geo_data[(1 + geo_length/2):geo_length]
+  for (i in 1:length(geo_data$features)) {
+    coordinates <- unlist(geo_data$features[[i]]$geometry$coordinates[[1]])
+    long <- coordinates[is.odd(seq_along(coordinates))]
+    lat <-  coordinates[is.even(seq_along(coordinates))]
+    
+    if(length(long) != length(lat)){
+      stop("Wrong subset of coordinate vector", call. = FALSE)
+    }
+    
+    geo_length <- length(long)
+    
+    estado <- toupper(geo_data$features[[i]]$properties$name)
+    codigo <- as.integer(geo_data$features[[i]]$properties$codigo_ibg)
+    regiao <- as.integer(geo_data$features[[i]]$properties$regiao_id)
+    
+    maps_df[[i]] <- as_tibble(
+      list(
+        estado = rep(stri_trans_general(estado,"Latin-ASCII"), geo_length),
+        codigo = rep(codigo, geo_length),
+        regiao = rep(regiao, geo_length),
+        longitude = long,
+        latitude = lat
+      )
     )
-  )
-}
-
-map_df <- bind_rows(maps_df)
-map_df <- map_df %>% filter(latitude > -40, longitude < -30)
-
-# maps_df$order <- rep(1:nrow(maps_df))
-
+  }
+  
+  map_df <- bind_rows(maps_df)
 ```
 
 
@@ -163,79 +163,48 @@ df$estado <- as.character(df$estado)
 
 
 ```{r}
-
 df %>% 
   select(estado) %>% 
   group_by(estado) %>% 
   summarise(n = n()) %>% 
   right_join(map_df, by = 'estado') %>% 
-  ggplot(aes(x = longitude, y = latitude, group = codigo, fill = n)) + 
+  ggplot(aes(x = longitude, y = latitude, group = codigo, fill = n/1000)) + 
     geom_polygon() + 
     geom_path(color = 'white') + 
     scale_fill_continuous(low = "orange", 
                           high = "darkred",
-                          name = 'Number of fires') 
-
-
-# fires %>% 
-#     select(region) %>%
-#     group_by(region) %>%
-#     summarize(n = n()) %>%
-#     right_join(map_obj, by = 'region') %>%
-#     ggplot(aes(x = long, y = lat, group = group, fill = n)) + 
-#     geom_polygon() + 
-#     geom_path(color = 'white') + 
-#     scale_fill_continuous(low = "orange", 
-#                           high = "darkred",
-#                           name = 'Number of fires')
-    # theme_map() +
-    # coord_map('albers', lat0=30, lat1=40) +
-    # ggtitle("US Wildfires, 1992-2015") +
-    # theme(plot.title = element_text(hjust = 0.5))
-```
-
-
-
-
-
-```{r}
-# first map of Brazil -----------------------------------------------------
-
-mapa <- borders("world", regions = "Brazil", fill = "grey70", colour = "black")
-
-brazil <- ggplot() + mapa + theme_bw() + xlab("Longitude (decimals)") + ylab("Latitude (decimals)") + 
-  theme(panel.border = element_blank(), panel.grid.major = element_line(colour = "grey80"), panel.grid.minor = element_blank())
-brazil
+                          name = 'Number of fires\n(thousands)'
+                          ) 
 ```
 
 
 ```{r}
-# map of Brazil + states --------------------------------------------------
-
-estados <- readShapePoly("./BRA_adm/BRA_adm1.shp")
-estados1 <- fortify(estados)
-head(estados1)
-
- estados1 %>% ggplot(aes(x = long, y = lat, group = id)) + 
-    geom_polygon() + 
-    geom_path(color = 'white') 
-View(estados1)
-# 
-# br_est <- brazil + geom_path(data = estados1, aes(x = long, y = lat, group = group), colour = "black")
-# br_est
+df %>% 
+  group_by(estado) %>% 
+  ggplot(aes(x = factor(estado))) +
+    geom_bar() +
+    coord_flip()
 ```
 
+O dataframe original não tem informações sobre macro regiões. Utilizando o data frame de mapas, podemos obter esta informação.
 
+```{r}
 
+regionsList <- list()
+n_reg <- length(unique(map_df$regiao))
+regions <- unique(map_df$regiao)
 
+for(i in 1:n_reg){
+  temp <- map_df %>% filter(regiao == regions[i])
+  
+  states <- unique(temp$estado)
+  regionsList[[i]] <- states
+}
 
+names(regionsList) <- c("NORTE", "NORDESTE", "SUDESTE", "CENTRO-OESTE", "SUL")
 
+for(i in 1:n_reg){
+  df$macroRegiao[df$estado %in% regionsList[[i]]] <- names(regionsList)[i]
+}
 
-
-
-
-
-
-
-
-
+```
