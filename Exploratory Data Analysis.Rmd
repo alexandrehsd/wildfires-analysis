@@ -208,3 +208,22 @@ for(i in 1:n_reg){
 }
 
 ```
+
+From NasaPower API we can obtain useful data for about 146 weather and climate parameters, such as:
+
+Relative humidty (at two meters)
+Temperature (at two meters)
+Precipitation (mm)
+Maximum/Minimum Monthly Difference From Monthly Averaged All Sky Insolation
+Wind Speed 
+
+geographical data are provided at the resolution of 1/2 arc degree longitude by 1/2 arc degree latitude. for more detailed info go to https://power.larc.nasa.gov/documents/POWER_Data_v9_methodology.pdf
+
+Another useful resource can be found at https://earthobservatory.nasa.gov/images/145464/fires-in-brazil
+
+Also in https://www.globalfiredata.org/data.html we can find data such as carbon emissions and dry matter emissions.
+
+
+
+
+
