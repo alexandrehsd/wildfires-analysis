@@ -30,7 +30,7 @@ data <- bind_rows(myfiles)
 names(data)
 
 # As we have many data records, we'll be working with a small subset of it
-df <- data[sample(nrow(data), 0.1*totalNo), ]
+df <- data[sample(nrow(data), 0.1*nrow(data)), ]
 totalNo <- nrow(df)
 
 object_size(df)
@@ -98,15 +98,6 @@ proportions
 As we can see, Amazonia represents around half of our dataset. In addition, the number of fire occurrences is very much like the proportion of land that each bioma has in brazilian territory.
 
 -------------------------- Visualisations -----------------------------
-
-```{r}
-temp <- df %>% 
-          mutate(ano = year(datahora),
-                 mes = month(datahora))
-
-View(temp)
-```
-
 
 ```{r, fig.width = 4, fig.height= 3}
 ggplot(df) + 
@@ -182,7 +173,7 @@ df %>%
   right_join(map_df, by = 'estado') %>% 
   ggplot(aes(x = longitude, y = latitude, group = codigo, fill = n/1000)) + 
     geom_polygon() + 
-    geom_path(color = 'white') + 
+    geom_path(color = 'white', size = 0.1) + 
     scale_fill_continuous(low = "orange", 
                           high = "darkred",
                           name = 'Number of fires\n(thousands)'
@@ -199,7 +190,7 @@ df %>%
   ggplot(aes(x = longitude, y = latitude, group = codigo, fill = n/1000)) + 
     geom_polygon() +
     facet_wrap(~ano) +
-    geom_path(color = 'white') + 
+    geom_path(color = 'white', size = 0.1) + 
     scale_fill_continuous(low = "orange", 
                           high = "darkred",
                           name = 'Number of fires\n(thousands)'
@@ -214,6 +205,65 @@ df %>%
     coord_flip()
 ```
 
+Visualizações para níveis de município
+
+```{r}
+
+```
+
+
+```{r}
+
+is.odd <- function(x) x %% 2 != 0
+is.even <- function(x) x %% 2 == 0
+
+geo_data_counties <- fromJSON(file = "./geo_data/geo_data_counties.json")
+
+maps_df_counties <- list()
+  for (i in 1:length(geo_data_counties$features)) {
+    coordinates <- unlist(geo_data_counties$features[[i]]$geometry$coordinates[[1]])
+    long <- coordinates[is.odd(seq_along(coordinates))]
+    lat <-  coordinates[is.even(seq_along(coordinates))]
+    
+    if(length(long) != length(lat)){
+      stop("Wrong subset of coordinate vector", call. = FALSE)
+    }
+    
+    geo_length <- length(long)
+    
+    municipio <- geo_data_counties$features[[i]]$properties$name
+    municipio <- toupper(stri_trans_general(municipio, "Latin-ASCII"))
+    codigo <- as.integer(geo_data_counties$features[[i]]$properties$id)
+    
+    maps_df_counties[[i]] <- as_tibble(
+      list(
+        municipio = rep(stri_trans_general(municipio, "Latin-ASCII"), geo_length),
+        codigo = rep(codigo, geo_length),
+        longitude = long,
+        latitude = lat
+      )
+    )
+  }
+  
+  map_df_county <- bind_rows(maps_df_counties)
+```
+
+```{r}
+df %>% 
+  select(municipio) %>% 
+  group_by(municipio) %>% 
+  summarise(n = n()) %>% 
+  right_join(map_df_county, by = 'municipio') %>% 
+  ggplot(aes(x = longitude, y = latitude, group = codigo, fill = n)) + 
+    geom_polygon() + 
+    geom_path(color = 'white', size = 0.1) +
+    scale_fill_continuous(low = "orange", 
+                          high = "darkred",
+                          name = 'Number of fires'
+                          ) 
+```
+
+Visualização por ano
 
 ```{r}
 df %>% 
@@ -223,6 +273,70 @@ df %>%
     geom_bar() +
     coord_flip()
 ```
+
+```{r}
+df %>% 
+  mutate(ano = year(datahora)) %>% 
+  group_by(estado, ano) %>% 
+  ggplot(aes(x = factor(estado), fill = factor(ano))) +
+    geom_bar(position = "fill") +
+    coord_flip()
+```
+
+
+Visualização por mes
+
+```{r}
+# Capitalizes names
+
+capitalize <- function(x) {
+  s <- strsplit(x, " ")[[1]]
+  paste(toupper(substring(s, 1,1)), substring(s, 2),
+      sep="", collapse=" ")
+}
+```
+
+
+```{r}
+levels <- c("Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro")
+
+df %>% 
+  mutate(mes = factor(sapply(months(datahora), capitalize), levels = levels)) %>%
+  group_by(mes) %>%
+  ggplot(aes(x = factor(mes), y = 100*..prop.., group = 1)) +
+    geom_bar()
+
+df %>% 
+  mutate(mes = factor(sapply(months(datahora), capitalize), levels = levels),
+         ano = factor(year(datahora))) %>%
+  group_by(ano, mes) %>%
+  ggplot(aes(x = mes, y = 100*..prop.., group = 1)) +
+    geom_bar() + 
+    facet_wrap(~ano) + coord_flip()
+```
+
+```{r}
+
+levels <- c("Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez")
+
+df %>% 
+  mutate(mes = factor(sapply(substr(months(df$datahora), 1, 3), capitalize), levels = levels),
+         ano = factor(year(datahora))) %>%
+  group_by(ano, mes) %>%
+  ggplot(aes(x = mes, fill = ano)) +
+    geom_bar(position = "dodge")
+
+df %>% 
+  mutate(mes = factor(sapply(substr(months(df$datahora), 1, 3), capitalize), levels = levels),
+         ano = factor(year(datahora))) %>%
+  group_by(ano, mes) %>%
+  ggplot(aes(x = mes, fill = ano)) +
+    geom_bar() + 
+    facet_wrap(~ano) +
+    coord_flip()
+```
+
+
 
 O dataframe original não tem informações sobre macro regiões. Utilizando o data frame de mapas, podemos obter esta informação.
 
@@ -247,6 +361,23 @@ for(i in 1:n_reg){
 
 ```
 
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 From NasaPower API we can obtain useful data for about 146 weather and climate parameters, such as:
 
 Relative humidty (at two meters)
@@ -260,6 +391,16 @@ geographical data are provided at the resolution of 1/2 arc degree longitude by 
 Another useful resource can be found at https://earthobservatory.nasa.gov/images/145464/fires-in-brazil
 
 Also in https://www.globalfiredata.org/data.html we can find data such as carbon emissions and dry matter emissions.
+
+```{r}
+# nasaModis <- read.csv("./database/fire_nrt_M6_77962.csv")
+# nasaViirs <- read.csv("./database/fire_nrt_V1_77963.csv")
+# object_size(nasaModis)
+# object_size(nasaViirs)
+# View(nasaModis)
+# View(nasaViirs)
+```
+
 
 
 
