@@ -14,27 +14,29 @@ library(stringr)
 library(stringi) # remove diacritics
 library(ggfortify)
 library(rjson)
+library(nasapower)
 ```
 
 
-There are 4 csv files containing data about the fires of all ocurrences around all brazilian territory. Each file has data between 1st Sept to 31th Aug of each year from 2015 to 2019.
+There are 4 csv files containing data about the fires of all ocurrences around all brazilian territory. Each file has data between 1st Sept to 30th Sept of each year from 2015 to 2019.
 
 ```{r}
 temp <- list.files(path = "./database" ,pattern = "*.csv")
 myfiles = lapply(paste0("./database/",temp), read.csv)
 
 nrecords <- lapply(myfiles, nrow)
-totalNo <- sum(unlist(nrecords))
 
 data <- bind_rows(myfiles)
 names(data)
 
-df <- data
+# As we have many data records, we'll be working with a small subset of it
+df <- data[sample(nrow(data), 0.1*totalNo), ]
+totalNo <- nrow(df)
 
 object_size(df)
 ```
 
-there are 767.695 observations in our dataset which sums up to 59.5 MB of storaged data.
+there are 820929 observations in our dataset which sums up to 66.8 MB of storaged data.
 
 ```{r}
 head(df)
@@ -94,6 +96,17 @@ proportions
 ```
 
 As we can see, Amazonia represents around half of our dataset. In addition, the number of fire occurrences is very much like the proportion of land that each bioma has in brazilian territory.
+
+-------------------------- Visualisations -----------------------------
+
+```{r}
+temp <- df %>% 
+          mutate(ano = year(datahora),
+                 mes = month(datahora))
+
+View(temp)
+```
+
 
 ```{r, fig.width = 4, fig.height= 3}
 ggplot(df) + 
@@ -161,7 +174,6 @@ maps_df <- list()
 df$estado <- as.character(df$estado)
 ```
 
-
 ```{r}
 df %>% 
   select(estado) %>% 
@@ -177,11 +189,37 @@ df %>%
                           ) 
 ```
 
+```{r}
+df %>% 
+  select(estado, datahora) %>% 
+  mutate(ano = year(datahora)) %>% 
+  group_by(estado, ano) %>% 
+  summarise(n = n()) %>% 
+  right_join(map_df, by = 'estado') %>% 
+  ggplot(aes(x = longitude, y = latitude, group = codigo, fill = n/1000)) + 
+    geom_polygon() +
+    facet_wrap(~ano) +
+    geom_path(color = 'white') + 
+    scale_fill_continuous(low = "orange", 
+                          high = "darkred",
+                          name = 'Number of fires\n(thousands)'
+                          ) 
+```
 
 ```{r}
 df %>% 
   group_by(estado) %>% 
   ggplot(aes(x = factor(estado))) +
+    geom_bar() +
+    coord_flip()
+```
+
+
+```{r}
+df %>% 
+  mutate(ano = year(datahora)) %>% 
+  group_by(estado, ano) %>% 
+  ggplot(aes(x = factor(estado), fill = factor(ano))) +
     geom_bar() +
     coord_flip()
 ```
