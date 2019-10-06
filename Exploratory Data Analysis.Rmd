@@ -449,6 +449,40 @@ na.omit(df) %>%
 
 
 
+```{r}
+data19 <- df %>% filter(year(datahora) == '2019')
+
+df %>% 
+  select(estado) %>% 
+  group_by(estado) %>% 
+  summarise(n = n()) %>% 
+  right_join(map_df, by = 'estado') %>% 
+  ggplot(aes(x = longitude, y = latitude, group = codigo)) + 
+    geom_polygon() + 
+    geom_point(inherit.aes = F, data = data19, aes(x = longitude, y = latitude, col = bioma), size = 0.1, shape = 3) +
+    geom_path(color = 'white', size = 0.1)
+```
+
+```{r}
+data_yearly <- df %>% mutate(ano = year(datahora))
+
+df %>%
+  select(estado, datahora) %>%
+  mutate(ano = year(datahora)) %>%
+  group_by(estado, ano) %>% 
+  summarise(n = n()) %>% 
+  right_join(map_df, by = 'estado') %>%
+  ggplot(aes(x = longitude, y = latitude, group = codigo)) +
+    geom_polygon() +
+    geom_point(inherit.aes = F, data = data_yearly, aes(x = longitude, y = latitude, col = bioma), size = 0.05) +
+    facet_wrap(~ano) +
+    geom_path(color = 'white', size = 0.1)
+# 
+# 
+```
+
+
+
 From NasaPower API we can obtain useful data for about 146 weather and climate parameters, such as:
 
 Relative humidty (at two meters)
@@ -464,9 +498,8 @@ Another useful resource can be found at https://earthobservatory.nasa.gov/images
 Also in https://www.globalfiredata.org/data.html we can find data such as carbon emissions and dry matter emissions.
 
 ```{r}
-# nasaModis <- read.csv("./database/fire_nrt_M6_77962.csv")
-nasaViirs <- read.csv("./database/DL_FIRE_V1_77994/fire_archive_V1_77994.csv")
-nasaModis <-  read.csv("./database/DL_FIRE_M6_78067/fire_archive_M6_78067.csv")
+# nasaViirs <- read.csv("./database/DL_FIRE_V1_77994/fire_archive_V1_77994.csv")
+# nasaModis <-  read.csv("./database/DL_FIRE_M6_78067/fire_archive_M6_78067.csv")
 # object_size(nasaModis)
 # object_size(nasaViirs)
 # View(nasaModis)
