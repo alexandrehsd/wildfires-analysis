@@ -7,7 +7,8 @@ output: html_notebook
 # Loading packages
 library(pryr) # Memory usage information
 library(lubridate) # date manipulation
-library(dplyr) # data manipulation 
+library(dplyr) # data manipulation
+library(tidyr) # data manipulation
 library(ggplot2) # graphics
 library(plotly)
 library(stringr)
@@ -48,9 +49,10 @@ str(df)
 
 Aparentemente, A coluna de área industrial e FRP tem poucas entradas não nulas
 
+
 ```{r}
-# paste("Percentage of NAs entries on `FRP` =",
-#       100*sum(is.na(df$frp))/totalNo)
+paste("Percentage of NAs entries on `FRP` =",
+      100*sum(is.na(df$frp))/totalNo)
 
 wetDays <- df$diasemchuva <= 10
 dryDays <- df$diasemchuva > 10
@@ -105,18 +107,15 @@ ggplot(df) +
     coord_flip()
 ```
 
-
 ```{r}
-
 df %>% 
-  mutate(year_month = str_c(format(datahora, "%y/%m"))) %>% 
-  group_by(year_month, bioma) %>% 
+  mutate(month = floor_date(date(datahora), "month")) %>% 
+  group_by(month, bioma) %>% 
   summarise(n_fires = n()) %>% 
-  ggplot(aes(x = year_month, y = n_fires/1000)) +
+  ggplot(aes(x = month, y = n_fires/1000)) +
   geom_bar(aes(fill = bioma), stat = 'identity') + 
-    labs(x = '', y = 'Number of wildfires (thousands)', title = 'Brazilian Wildfires by Year') +
-    coord_flip()
-
+    scale_x_date(date_labels = "%b/%y", date_breaks = "6 months") +
+    labs(y = "NUmber of fires in thousands", title = 'Brazilian Wildfires by Year')
 ```
 
 In order to plot the number of fires by state, we must do some data wrangling to put the data in the desired format.
@@ -207,16 +206,8 @@ df %>%
 
 Visualizações para níveis de município
 
-```{r}
-
-```
-
 
 ```{r}
-
-is.odd <- function(x) x %% 2 != 0
-is.even <- function(x) x %% 2 == 0
-
 geo_data_counties <- fromJSON(file = "./geo_data/geo_data_counties.json")
 
 maps_df_counties <- list()
@@ -336,6 +327,26 @@ df %>%
     coord_flip()
 ```
 
+```{r}
+df %>% 
+  mutate(date = date(datahora)) %>% 
+  group_by(date) %>% 
+  ggplot(aes(x = date, group = 1)) +
+   geom_freqpoly(stat = "count") +
+   scale_x_date(date_breaks = "6 months", date_labels = "%b/%y")
+```
+
+Strangely, our dataset only has records of fire occurences from 3 to 6 pm. Why is it?
+
+```{r}
+df %>% 
+  mutate(hour = hour(datahora)) %>% 
+  group_by(hour) %>% 
+  ggplot(aes(x = hour, group = 1)) +
+   geom_bar(stat = "count")
+```
+```
+
 
 
 O dataframe original não tem informações sobre macro regiões. Utilizando o data frame de mapas, podemos obter esta informação.
@@ -343,6 +354,7 @@ O dataframe original não tem informações sobre macro regiões. Utilizando o d
 ```{r}
 
 regionsList <- list()
+codMacroRegions <- list()
 n_reg <- length(unique(map_df$regiao))
 regions <- unique(map_df$regiao)
 
@@ -351,32 +363,36 @@ for(i in 1:n_reg){
   
   states <- unique(temp$estado)
   regionsList[[i]] <- states
+  codMacroRegions[[i]] <- regions[i]
 }
 
 names(regionsList) <- c("NORTE", "NORDESTE", "SUDESTE", "CENTRO-OESTE", "SUL")
 
 for(i in 1:n_reg){
   df$macroRegiao[df$estado %in% regionsList[[i]]] <- names(regionsList)[i]
+  df$codMacroRegiao[df$estado %in% regionsList[[i]]] <- codMacroRegions[[i]]
 }
-
 ```
 
 ```{r}
 
+# O nome regiao do dataframe map_df nao tem o mesmo sentido que no dataframe df
+# sendo assim, criou-se um dataframe auxiliar com os nomes correspondentes
+temp <- df[,c("macroRegiao", "codMacroRegiao")]
+names(temp) <- c("macroregiao", "regiao")
+
+temp %>% 
+  group_by(macroregiao, regiao) %>% 
+  summarise(n = n()) %>% 
+  right_join(map_df, by = 'regiao') %>% 
+  ggplot(aes(x = longitude, y = latitude, group = regiao, fill = n/1000)) + 
+    geom_polygon() + 
+    geom_path(color = 'white', size = 0.1) + 
+    scale_fill_continuous(low = "orange", 
+                          high = "darkred",
+                          name = 'Number of fires\n(thousands)'
+                          ) 
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 From NasaPower API we can obtain useful data for about 146 weather and climate parameters, such as:
 
