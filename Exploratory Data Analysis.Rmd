@@ -74,7 +74,10 @@ we can also investigate another columns that have either redundant data or not u
 
 ```{r}
 levels(df$pais)
+levels(df$satelite)
+
 df$pais <- NULL
+df$satelite <- NULL
 
 object_size(df)
 ```
@@ -107,6 +110,8 @@ ggplot(df) +
     coord_flip()
 ```
 
+Now, it is also important to get the underlying trend of the number of fire ocurrences through the months of the year. Let's start exploring this idea:
+
 ```{r}
 df %>% 
   mutate(month = floor_date(date(datahora), "month")) %>% 
@@ -115,7 +120,7 @@ df %>%
   ggplot(aes(x = month, y = n_fires/1000)) +
   geom_bar(aes(fill = bioma), stat = 'identity') + 
     scale_x_date(date_labels = "%b/%y", date_breaks = "6 months") +
-    labs(y = "NUmber of fires in thousands", title = 'Brazilian Wildfires by Year')
+    labs(y = "Number of fires in thousands", title = 'Brazilian Wildfires by Year')
 ```
 
 In order to plot the number of fires by state, we must do some data wrangling to put the data in the desired format.
@@ -157,7 +162,6 @@ maps_df <- list()
   map_df <- bind_rows(maps_df)
 ```
 
-
 ```{r}
 # the `estado` column of the map dataframe is a character, so in order
 # to avoid coertion from factor to character, let's convert it explicitly
@@ -179,6 +183,10 @@ df %>%
                           ) 
 ```
 
+As we can see, the state with the most fire ocurrences is Pará in which most of its lands belongs to the amazon ecossystem, this may explain why half the dataset ocurrences comes from Amazon fires.
+
+As we can see below, this trend happens all years.
+
 ```{r}
 df %>% 
   select(estado, datahora) %>% 
@@ -196,6 +204,8 @@ df %>%
                           ) 
 ```
 
+In terms of raw numbers, we can visualize this difference below.
+
 ```{r}
 df %>% 
   group_by(estado) %>% 
@@ -204,8 +214,7 @@ df %>%
     coord_flip()
 ```
 
-Visualizações para níveis de município
-
+Going down one level, let's try an analysis by county
 
 ```{r}
 geo_data_counties <- fromJSON(file = "./geo_data/geo_data_counties.json")
@@ -254,7 +263,7 @@ df %>%
                           ) 
 ```
 
-Visualização por ano
+What about that total number of fire ocurrences by state? From when does it come from?
 
 ```{r}
 df %>% 
@@ -265,6 +274,8 @@ df %>%
     coord_flip()
 ```
 
+Let's repeat the last plot, but now considering the proportions
+
 ```{r}
 df %>% 
   mutate(ano = year(datahora)) %>% 
@@ -274,8 +285,7 @@ df %>%
     coord_flip()
 ```
 
-
-Visualização por mes
+Let's reinforce what we've seen by far and plot the data considering a monthly frequency
 
 ```{r}
 # Capitalizes names
@@ -306,6 +316,10 @@ df %>%
     facet_wrap(~ano) + coord_flip()
 ```
 
+As we can see, in 2019 the trend was a bit different, maybe it is so because of the popular protests against the liberal and progressive view of brazilian government towards amazonia.
+
+Let's compact this plot in only one frame:
+
 ```{r}
 
 levels <- c("Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez")
@@ -315,16 +329,17 @@ df %>%
          ano = factor(year(datahora))) %>%
   group_by(ano, mes) %>%
   ggplot(aes(x = mes, fill = ano)) +
-    geom_bar(position = "dodge")
+    geom_bar() + 
+    facet_wrap(~ano) +
+    coord_flip()
 
 df %>% 
   mutate(mes = factor(sapply(substr(months(df$datahora), 1, 3), capitalize), levels = levels),
          ano = factor(year(datahora))) %>%
   group_by(ano, mes) %>%
   ggplot(aes(x = mes, fill = ano)) +
-    geom_bar() + 
-    facet_wrap(~ano) +
-    coord_flip()
+    geom_bar(position = "dodge")
+
 ```
 
 ```{r}
@@ -345,9 +360,6 @@ df %>%
   ggplot(aes(x = hour, group = 1)) +
    geom_bar(stat = "count")
 ```
-```
-
-
 
 O dataframe original não tem informações sobre macro regiões. Utilizando o data frame de mapas, podemos obter esta informação.
 
@@ -394,6 +406,49 @@ temp %>%
                           ) 
 ```
 
+
+
+```{r}
+na.omit(df) %>% ggplot(aes(x = frp, y = precipitacao, alpha = riscofogo)) +
+  geom_point()
+
+na.omit(df) %>% ggplot(aes(x = log(frp), y = precipitacao, alpha = riscofogo)) +
+  geom_point()
+```
+
+Notice the relationship among the fire radiative power, the precipitation and the risk of fire. It seems that, with more precipitation, the frp is reduced while with less precipitation the risk of fire remains mostly
+
+```{r}
+na.omit(df) %>% ggplot(aes(x = riscofogo, y = precipitacao, alpha = frp)) +
+  geom_point(position = "jitter")
+```
+
+Looking at the distribution of the fire radiative power across different biomas, we can see that it is roughly the same, except for Mata Atlantica and Pampa maybe because Pampa is situated at the south brazil, where temperatures are lower which decreases the chances of fire ocurrences. On the other side, Mata Atlantica is mostly distributed along the coast, implying that the humidity that comes from the ocean may hold fire ocurrences from stroke.
+
+```{r}
+na.omit(df) %>% ggplot(aes(x = bioma, y = log(frp))) +
+  geom_boxplot()
+```
+
+```{r}
+p <- na.omit(df) %>% ggplot(aes(x = log(frp), col = bioma, fill = bioma)) +
+  geom_density(alpha = 0.1)
+
+ggplotly(p)
+```
+
+As we can see below, we cannot take any conclusion about the risk of fire with respect to the fire radiative power. So sad.
+
+```{r}
+na.omit(df) %>% 
+  ggplot(aes(x = riscofogo, y = log(frp), col = bioma)) +
+    geom_point() + # Copy from Plot 1
+    geom_smooth(method = "lm", se = FALSE) +
+    geom_smooth(aes(group = 1), method = "lm", se = FALSE, linetype = 2) 
+```
+
+
+
 From NasaPower API we can obtain useful data for about 146 weather and climate parameters, such as:
 
 Relative humidty (at two meters)
@@ -410,7 +465,8 @@ Also in https://www.globalfiredata.org/data.html we can find data such as carbon
 
 ```{r}
 # nasaModis <- read.csv("./database/fire_nrt_M6_77962.csv")
-# nasaViirs <- read.csv("./database/fire_nrt_V1_77963.csv")
+nasaViirs <- read.csv("./database/DL_FIRE_V1_77994/fire_archive_V1_77994.csv")
+nasaModis <-  read.csv("./database/DL_FIRE_M6_78067/fire_archive_M6_78067.csv")
 # object_size(nasaModis)
 # object_size(nasaViirs)
 # View(nasaModis)
