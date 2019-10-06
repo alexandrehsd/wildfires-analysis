@@ -16,6 +16,7 @@ library(stringi) # remove diacritics
 library(ggfortify)
 library(rjson)
 library(nasapower)
+library(ggsci) # Scientific color palletes
 ```
 
 
@@ -431,10 +432,15 @@ na.omit(df) %>% ggplot(aes(x = bioma, y = log(frp))) +
 ```
 
 ```{r}
-p <- na.omit(df) %>% ggplot(aes(x = log(frp), col = bioma, fill = bioma)) +
-  geom_density(alpha = 0.1)
+# The palette with grey:
+cbp1 <- c("#D55E00", "#E69F00", "#56B4E9", "#009E73",
+          "#F0E442", "#0072B2", "#999999", "#CC79A7")
 
-ggplotly(p)
+na.omit(df) %>% ggplot(aes(x = log(frp), col = bioma, fill = bioma)) +
+  geom_density(alpha = 0.1) +
+  scale_color_manual(values = cbp1) +
+  scale_fill_manual(values = cbp1)
+
 ```
 
 As we can see below, we cannot take any conclusion about the risk of fire with respect to the fire radiative power. So sad.
@@ -443,8 +449,8 @@ As we can see below, we cannot take any conclusion about the risk of fire with r
 na.omit(df) %>% 
   ggplot(aes(x = riscofogo, y = log(frp), col = bioma)) +
     geom_point() + # Copy from Plot 1
-    geom_smooth(method = "lm", se = FALSE) +
-    geom_smooth(aes(group = 1), method = "lm", se = FALSE, linetype = 2) 
+    geom_smooth(method = "lm", se = TRUE) +
+    geom_smooth(aes(group = 1), method = "lm", se = TRUE, linetype = 2) 
 ```
 
 
@@ -460,11 +466,12 @@ df %>%
   ggplot(aes(x = longitude, y = latitude, group = codigo)) + 
     geom_polygon() + 
     geom_point(inherit.aes = F, data = data19, aes(x = longitude, y = latitude, col = bioma), size = 0.1, shape = 3) +
+    scale_color_manual(values = cbp1) +
     geom_path(color = 'white', size = 0.1)
 ```
 
 ```{r}
-data_yearly <- df %>% mutate(ano = year(datahora))
+data_yearly <- df %>% mutate(ano = year(datahora)) %>% group_by(estado, ano)
 
 df %>%
   select(estado, datahora) %>%
@@ -474,13 +481,11 @@ df %>%
   right_join(map_df, by = 'estado') %>%
   ggplot(aes(x = longitude, y = latitude, group = codigo)) +
     geom_polygon() +
-    geom_point(inherit.aes = F, data = data_yearly, aes(x = longitude, y = latitude, col = bioma), size = 0.05) +
+    geom_point(inherit.aes = F, data = data_yearly, aes(x = longitude, y = latitude, col = bioma), size = 0.05, shape = 3) +
+    scale_color_manual(values = cbp1) +
     facet_wrap(~ano) +
     geom_path(color = 'white', size = 0.1)
-# 
-# 
 ```
-
 
 
 From NasaPower API we can obtain useful data for about 146 weather and climate parameters, such as:
