@@ -42,11 +42,11 @@ object_size(df)
 there are 820929 observations in our dataset which sums up to 66.8 MB of storaged data.
 
 ```{r}
-head(df)
+str(df)
 ```
 
 ```{r}
-str(df)
+summary(df)
 ```
 
 Aparentemente, A coluna de área industrial e FRP tem poucas entradas não nulas
@@ -492,7 +492,7 @@ df %>%
 What about cumulative sums?
 
 ```{r}
-accum <- df %>%
+accum_fires_inpe <- df %>%
   mutate(data = date(datahora),
          ano = year(datahora)) %>% 
   select(ano, data) %>% 
@@ -501,13 +501,13 @@ accum <- df %>%
   mutate(cum_sum = cumsum(occurrence),
          dia_ano = yday(data))
 
-accum %>% ggplot(aes(x = data, y = cum_sum)) +
+accum_fires_inpe %>% ggplot(aes(x = data, y = cum_sum)) +
   geom_line() +
   scale_x_date(date_breaks = "4 months", date_labels = "%b/%y")
 ```
 
 ```{r}
-splitted <- accum %>% select(ano, dia_ano, cum_sum)
+splitted <- accum_fires_inpe %>% select(ano, dia_ano, cum_sum)
 
 # Using `do` function to replace NAs values with the last records value
 tidy <- splitted %>% spread(key = ano, value = cum_sum) %>% do(zoo::na.locf(.))
@@ -526,6 +526,140 @@ tidy %>%
   scale_y_continuous("Number of fires")
 ```
 
+As seen before, our dataset lacks of 70% information about the fire radiative power of fires. In order to analyze 
+this variable with confident outcomes, we need other data sources. From data collected from Nasa Modis project it is possible to enhance the analysis with much more data.
+
+```{r}
+# Find the documentation at https://earthdata.nasa.gov/earth-observation-data/near-real-time/firms/active-fire-data
+
+# Load the archived data (before 1st aug/19)
+nasaModis1 <-  read.csv("./database/DL_FIRE_M6_79475/fire_archive_M6_79475.csv")
+
+# Load non standard science quality data (after 1st aug/19)
+nasaModis2 <- read.csv("./database/DL_FIRE_M6_79475/fire_nrt_M6_79475.csv")
+
+```
+
+```{r}
+str(nasaModis1)
+```
+
+```{r}
+str(nasaModis2)
+```
+
+In order to accomplish an accurate analysis in this dataset, we need to filter some rows. By doing so, we can get close to the data quality of INPE's dataset.
+
+First of all, the type describes the Inferred hot spot type and assumes 4 values: 0 (presumed vegetation fire), 1 (active volcano), 2 (other statis land source), 3 (offshore). Therefore, we're going the filter the data for type = 0.
+
+Another important thing to note is the confidence variable. This value is based on a collection of intermediate algorithm quantities used in the detection process. It is intended to help users gauge the quality of individual hotspot/fire pixels. Confidence estimates range between 0 and 100% and are assigned one of the three fire classes (low-confidence fire, nominal-confidence fire, or high-confidence fire).
+
+As a consequence, I am going to consider only the records with more than 50% of confidence. 
+
+Additionally, notice that the non-standard science quality dataset has no information about the type of the fire. Let's assume all fires from these bunch are vegetation fires. With this, to bind the two datasets, we need to filter the nasaModis1 to get only type 0 fires and then drop this column since the nasaModis2 does not have this variable.
+
+```{r}
+nasaModis1 <- nasaModis1 %>% filter(type == 0)
+nasaModis1$type <- NULL
+
+nasaModis2$version <- as.numeric(nasaModis2$version)
+
+nasaModis <- bind_rows(nasaModis1, nasaModis2)
+
+modis <- nasaModis %>% 
+  filter(confidence > 50)
+```
+
+the acq_date variable is of type factor, it needs to be converted to a standard date type;
+
+```{r}
+modis$acq_date <- as.Date(modis$acq_date) 
+```
+
+
+The filtered data corresponds to 78.3% of the hole dataset. By the summary statistics of the data, we clearly don't need the columns satellite, instrument, version and type. In addition, the scan and track columns do not provide us with useful information. Hence, they will also be forget.
+
+```{r}
+modis[,c("scan", "track", "satellite", "instrument", "version", "type")] <- NULL
+```
+
+Let's a plot like the acummulated fires vs day of the year, and also accumulated frp vs day of the year
+
+```{r}
+accum_fires_nasa <- modis %>%
+  mutate(acq_year = year(acq_date)) %>% 
+  select(acq_year, acq_date) %>% 
+  group_by(acq_year, acq_date) %>% 
+  summarise(occurrences = n()) %>% 
+  mutate(cum_sum = cumsum(occurrences),
+         day_year = yday(acq_date))
+```
+
+```{r}
+accum_fires_nasa %>% ggplot(aes(x = acq_date, y = cum_sum)) +
+  geom_line() +
+  scale_x_date(date_breaks = "4 months", date_labels = "%b/%y")
+```
+
+Wrangling data to plot accumulated fires vs day of the year
+
+```{r}
+splitted <- accum_fires_nasa %>% select(acq_year, day_year, cum_sum)
+
+# Using `do` function to replace NAs values with the last records value
+tidy <- splitted %>% spread(key = acq_year, value = cum_sum) %>% do(zoo::na.locf(.))
+tidy$`2019`[273:nrow(tidy)] <- NA
+tidy <- tidy %>% 
+  gather("2015", "2016", "2017", "2018", "2019", key = "acq_year", "value" = fires)
+  
+```
+
+
+```{r}
+tidy %>% 
+  ggplot(aes(x = day_year, y = fires / 1000, col = acq_year)) +
+  geom_line() +
+  scale_color_manual(values = c("grey", "grey", "grey", "grey", "blue")) +
+  scale_x_continuous("Day of the year", breaks = seq(from = 0, to = 366, by = 50)) +
+  scale_y_continuous("Number of fires in thousands")
+```
+
+Now let's wrap over the frp variable
+
+```{r}
+accum_frp_nasa <- modis %>%
+  mutate(acq_year = year(acq_date)) %>% 
+  select(acq_year, acq_date, frp) %>% 
+  group_by(acq_year, acq_date) %>% 
+  summarise(frp = sum(frp)) %>% 
+  mutate(cum_frp = cumsum(frp),
+         day_year = yday(acq_date))
+```
+
+```{r}
+accum_frp_nasa %>% ggplot(aes(x = acq_date, y = cum_frp)) +
+  geom_line() +
+  scale_x_date(date_breaks = "4 months", date_labels = "%b/%y")
+```
+
+```{r}
+splitted <- accum_frp_nasa %>% select(acq_year, day_year, cum_frp)
+
+# Using `do` function to replace NAs values with the last records value
+tidy <- splitted %>% spread(key = acq_year, value = cum_frp) %>% do(zoo::na.locf(.))
+tidy$`2019`[273:nrow(tidy)] <- NA
+tidy <- tidy %>% 
+  gather("2015", "2016", "2017", "2018", "2019", key = "acq_year", "value" = frp)
+```
+
+```{r}
+tidy %>% 
+  ggplot(aes(x = day_year, y = frp / 1000000, col = acq_year)) +
+  geom_line() +
+  scale_color_manual(values = c("grey", "grey", "grey", "grey", "blue")) +
+  scale_x_continuous("Day of the year", breaks = seq(from = 0, to = 366, by = 50)) +
+  scale_y_continuous("Fire Radiative power in millions")
+```
 
 From NasaPower API we can obtain useful data for about 146 weather and climate parameters, such as:
 
@@ -541,14 +675,6 @@ Another useful resource can be found at https://earthobservatory.nasa.gov/images
 
 Also in https://www.globalfiredata.org/data.html we can find data such as carbon emissions and dry matter emissions.
 
-```{r}
-# nasaViirs <- read.csv("./database/DL_FIRE_V1_77994/fire_archive_V1_77994.csv")
-# nasaModis <-  read.csv("./database/DL_FIRE_M6_78067/fire_archive_M6_78067.csv")
-# object_size(nasaModis)
-# object_size(nasaViirs)
-# View(nasaModis)
-# View(nasaViirs)
-```
 
 
 
