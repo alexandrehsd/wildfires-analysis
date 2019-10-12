@@ -512,20 +512,19 @@ splitted <- accum %>% select(ano, dia_ano, cum_sum)
 # Using `do` function to replace NAs values with the last records value
 tidy <- splitted %>% spread(key = ano, value = cum_sum) %>% do(zoo::na.locf(.))
 tidy$`2019`[273:nrow(tidy)] <- NA
+tidy <- tidy %>% 
+  gather("2015", "2016", "2017", "2018", "2019", key = "year", "value" = fires)
   
 ```
 
 ```{r}
-tidy %>% ggplot(aes(x = dia_ano)) +
-  geom_line(aes(y = `2015`, col = "#bfac8e")) +
-  geom_line(aes(y = `2016`, col = "#d5f56c")) +
-  geom_line(aes(y = `2017`, col = "#c95b5b")) +
-  geom_line(aes(y = `2018`, col = "#b85dd4")) +
-  geom_line(aes(y = `2019`), col = "#917783") +
-  scale_x_continuous("Day of the year", breaks = seq(from = 1, to = 366, by = 50)) +
+tidy %>% 
+  ggplot(aes(x = dia_ano, y = fires, col = year)) +
+  geom_line() +
+  scale_color_manual(values = c("grey", "grey", "grey", "grey", "blue")) +
+  scale_x_continuous("Day of the year", breaks = seq(from = 0, to = 366, by = 50)) +
   scale_y_continuous("Number of fires")
 ```
-
 
 
 From NasaPower API we can obtain useful data for about 146 weather and climate parameters, such as:
