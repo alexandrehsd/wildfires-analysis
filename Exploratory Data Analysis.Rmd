@@ -731,6 +731,16 @@ tidy %>%
   scale_y_continuous("Fire Radiative power")
 ```
 
+```{r}
+clean_modis %>% 
+  group_by(acq_date) %>% 
+  summarise(mean_frp = mean(frp)) %>% 
+  ggplot(aes(x = acq_date, y = mean_frp)) +
+  geom_line() +
+  scale_x_date(date_breaks = "4 months", date_labels = "%b/%y")
+```
+
+this graph shows that there 9s a strong seasonality in the mean of the fire radiative power which has strongs components of periods Ts = 360 and Ts = 180 (Ts = sampling period).
 
 From NasaPower API we can obtain useful data for about 146 weather and climate parameters, such as:
 
@@ -752,6 +762,8 @@ Detailed information about fires on the Legal Amazon area is given at http://www
 
 Thoughts on fire forecasting https://www.nasa.gov/feature/goddard/2019/fire-forecasting-from-smart-phone-in-wilderness
 
+Wildfires against biodiversity https://onlinelibrary.wiley.com/doi/abs/10.1111/btp.12267 and
+https://link.springer.com/article/10.1007/s10531-012-0426-8
 
 
 
