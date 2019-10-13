@@ -379,7 +379,7 @@ time <- 1/top3$freq
 time
 ```
 
-Therefore, the seasonality of our dataset is given by annualy, semesterly and quaterly periods. For reference, see https://anomaly.io/detect-seasonality-using-fourier-transform-r/index.html
+Therefore, the seasonality of our dataset is given by annualy, semesterly and quaterly periods. For reference, see https://anomaly.io/detect-seasonality-using-fourier-transform-r/index.html and http://www.di.fc.ul.pt/~jpn/r/fourier/fourier.html
 
 Strangely, our dataset only has records of fire occurences from 3 to 6 pm. Why is it?
 
@@ -691,6 +691,47 @@ tidy %>%
 
 The result for MODIS corroborate with those from INPE.
 
+One thing that we do not see until this point was the average fire radiative power along the days of the year. However, as we have many extreme cases, i.e., outliers, we are gonna remove them before plotting the statistics
+
+```{r}
+
+q1 <- quantile(modis$frp, .25)
+q3 <- quantile(modis$frp, .75)
+iqr <- IQR(modis$frp)
+
+mild_low <- q1 - 1.5 * iqr
+mild_high <- q3 + 1.5 * iqr
+
+clean_modis <- modis[modis$frp > mild_low & modis$frp < mild_high, ] #rows
+
+mean_frp_nasa <- clean_modis %>%
+  mutate(acq_year = year(acq_date),
+         acq_week = week(acq_date)) %>% 
+  select(acq_year, acq_week, frp) %>% 
+  group_by(acq_year, acq_week) %>% 
+  summarise(mean_frp = mean(frp))
+```
+
+```{r}
+splitted <- mean_frp_nasa %>% select(acq_year, acq_week, mean_frp)
+
+# Using `do` function to replace NAs values with the last records value
+tidy <- splitted %>% spread(key = acq_year, value = mean_frp) %>% do(zoo::na.locf(.))
+tidy$`2019`[40:nrow(tidy)] <- NA
+tidy <- tidy %>% 
+  gather("2015", "2016", "2017", "2018", "2019", key = "acq_year", "value" = mean_frp)
+```
+
+```{r}
+tidy %>% 
+  ggplot(aes(x = acq_week, y = mean_frp, col = acq_year)) +
+  geom_line() +
+  scale_color_manual(values = c("grey", "grey", "grey", "grey", "red")) +
+  scale_x_continuous("Week of the year", breaks = seq(from = 0, to = 52, by = 4)) +
+  scale_y_continuous("Fire Radiative power")
+```
+
+
 From NasaPower API we can obtain useful data for about 146 weather and climate parameters, such as:
 
 Relative humidty (at two meters)
@@ -705,9 +746,11 @@ Another useful resource can be found at https://earthobservatory.nasa.gov/images
 
 Also in https://www.globalfiredata.org/data.html we can find data such as carbon emissions and dry matter emissions.
 
+For highly personalizable images go to https://worldview.earthdata.nasa.gov/
 
+Detailed information about fires on the Legal Amazon area is given at http://www.globalfiredata.org/forecast.html#amazonas
 
-
+Thoughts on fire forecasting https://www.nasa.gov/feature/goddard/2019/fire-forecasting-from-smart-phone-in-wilderness
 
 
 
