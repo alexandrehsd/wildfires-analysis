@@ -10,14 +10,17 @@ library(lubridate) # date manipulation
 library(dplyr) # data manipulation
 library(tidyr) # data manipulation
 library(ggplot2) # graphics
-library(plotly)
-library(stringr)
+library(plotly) # Interactive graphics
+library(stringr) # string manipulation
 library(stringi) # remove diacritics
 library(ggfortify)
-library(rjson)
-library(nasapower)
+library(rjson) # read json
+library(nasapower) # nasapower api data
 library(ggsci) # Scientific color palletes
 library(zoo) # Replace NAs in time series analysis
+library(rgdal) # Work with geo-spatial data
+library(sf) # geo-spatial vector data
+library(TSA) # Time Series Analys
 ```
 
 
@@ -353,6 +356,31 @@ df %>%
    scale_x_date(date_breaks = "6 months", date_labels = "%b/%y")
 ```
 
+As we can see above, our data presents strong patterns (seasonality). By doing a Fourier Transform, it is possible get to know what are the main frequencies of this time series.
+
+```{r}
+signal_INPE <- df %>% 
+  mutate(date = date(datahora)) %>% 
+  group_by(date) %>%
+  summarise(n = n())
+
+p <- periodogram(signal_INPE$n)
+
+dd = data.frame(freq=p$freq, spec=p$spec)
+order = dd[order(-dd$spec),]
+top3 = head(order, 3)
+
+# display the 2 highest "power" frequencies
+top3
+```
+
+```{r}
+time <- 1/top3$freq
+time
+```
+
+Therefore, the seasonality of our dataset is given by annualy, semesterly and quaterly periods. For reference, see https://anomaly.io/detect-seasonality-using-fourier-transform-r/index.html
+
 Strangely, our dataset only has records of fire occurences from 3 to 6 pm. Why is it?
 
 ```{r}
@@ -619,7 +647,7 @@ tidy <- tidy %>%
 tidy %>% 
   ggplot(aes(x = day_year, y = fires / 1000, col = acq_year)) +
   geom_line() +
-  scale_color_manual(values = c("grey", "grey", "grey", "grey", "blue")) +
+  scale_color_manual(values = c("grey", "grey", "grey", "grey", "red")) +
   scale_x_continuous("Day of the year", breaks = seq(from = 0, to = 366, by = 50)) +
   scale_y_continuous("Number of fires in thousands")
 ```
@@ -637,7 +665,7 @@ accum_frp_nasa <- modis %>%
 ```
 
 ```{r}
-accum_frp_nasa %>% ggplot(aes(x = acq_date, y = cum_frp)) +
+accum_frp_nasa %>% ggplot(aes(x = acq_date, y = cum_frp/1000000)) +
   geom_line() +
   scale_x_date(date_breaks = "4 months", date_labels = "%b/%y")
 ```
@@ -656,10 +684,12 @@ tidy <- tidy %>%
 tidy %>% 
   ggplot(aes(x = day_year, y = frp / 1000000, col = acq_year)) +
   geom_line() +
-  scale_color_manual(values = c("grey", "grey", "grey", "grey", "blue")) +
+  scale_color_manual(values = c("grey", "grey", "grey", "grey", "red")) +
   scale_x_continuous("Day of the year", breaks = seq(from = 0, to = 366, by = 50)) +
   scale_y_continuous("Fire Radiative power in millions")
 ```
+
+The result for MODIS corroborate with those from INPE.
 
 From NasaPower API we can obtain useful data for about 146 weather and climate parameters, such as:
 
@@ -674,6 +704,8 @@ geographical data are provided at the resolution of 1/2 arc degree longitude by 
 Another useful resource can be found at https://earthobservatory.nasa.gov/images/145464/fires-in-brazil
 
 Also in https://www.globalfiredata.org/data.html we can find data such as carbon emissions and dry matter emissions.
+
+
 
 
 
