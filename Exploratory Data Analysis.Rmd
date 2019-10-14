@@ -27,8 +27,8 @@ library(TSA) # Time Series Analys
 There are 4 csv files containing data about the fires of all ocurrences around all brazilian territory. Each file has data between 1st Sept to 30th Sept of each year from 2015 to 2019.
 
 ```{r}
-temp <- list.files(path = "./database" ,pattern = "*.csv")
-myfiles = lapply(paste0("./database/",temp), read.csv)
+temp <- list.files(path = "./database/modis_15-19" ,pattern = "*.csv")
+myfiles = lapply(paste0("./database/modis_15-19/",temp), read.csv)
 
 nrecords <- lapply(myfiles, nrow)
 
@@ -135,7 +135,7 @@ In order to plot the number of fires by state, we must do some data wrangling to
 is.odd <- function(x) x %% 2 != 0
 is.even <- function(x) x %% 2 == 0
 
-geo_data <- fromJSON(file = "./geo_data/geo_data.json")
+geo_data <- fromJSON(file = "./geo_data/geo_data_states.json")
 
 maps_df <- list()
   for (i in 1:length(geo_data$features)) {
@@ -741,6 +741,19 @@ clean_modis %>%
 ```
 
 this graph shows that there 9s a strong seasonality in the mean of the fire radiative power which has strongs components of periods Ts = 360 and Ts = 180 (Ts = sampling period).
+
+Let's investigate the fires of the Amazonia during the fire season:
+
+Cumulative active fire detections from May 1st through October 1st from MODIS (Aqua + Terra) and VIIRS (SNPP) show that fire detections in 2019 have fallen below cumulative levels of fire activity detected in 2012 (the start of the VIIRS record) and 2017 across the Legal Amazon. Through the end of September, fires in 2019 were more intense than any year since 2012, measured in terms of fire radiative power, consistent with the observed increase in deforestation this year.
+
+```{r}
+shape <- read_sf(dsn = "./geo_data/legal_amazon_simple", layer = "UF_AMLeg_LLwgs84_Simple")
+```
+
+```{r}
+modis_fcount <- read.csv("./database/legal_amazon_fc_frp_20191001/Table_MODIS_fire_counts_2003_2019.csv")
+```
+
 
 From NasaPower API we can obtain useful data for about 146 weather and climate parameters, such as:
 
