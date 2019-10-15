@@ -748,11 +748,84 @@ Cumulative active fire detections from May 1st through October 1st from MODIS (A
 
 ```{r}
 shape <- read_sf(dsn = "./geo_data/legal_amazon_simple", layer = "UF_AMLeg_LLwgs84_Simple")
+
+# Shapefile of amazon legal area can also be obtained at http://www.dpi.inpe.br/Ambdata/unidades_administrativas.php
+
+shapeINPE <- read_sf(dsn = "./geo_data/AmLeg_LLwgs84", layer = "amazlegal")
 ```
+
+```{r}
+legal_amazon <- as.data.frame(shape$geometry[[1]][[1]])
+names(legal_amazon) <- c("longitude", "latitude")
+
+legal_amazon_INPE <- as.data.frame(shapeINPE$geometry[[1]][[1]][[1]])
+names(legal_amazon_INPE) <- c("longitude", "latitude")
+
+legal_amazon %>% ggplot(aes(x = longitude, y = latitude)) +
+  geom_polygon()
+
+legal_amazon_INPE %>% ggplot(aes(x = longitude, y = latitude)) +
+  geom_polygon()
+
+# To see if a point is inside a polygon
+# point.in.polygon(-60, -5, shape$geometry[[1]][[1]][,1], shape$geometry[[1]][[1]][,2])
+```
+
+
+```{r}
+df %>% 
+  select(estado) %>% 
+  group_by(estado) %>% 
+  summarise(n = n()) %>% 
+  right_join(map_df, by = 'estado') %>% 
+  ggplot(aes(x = longitude, y = latitude, group = codigo)) + 
+    geom_polygon() + 
+    geom_point(inherit.aes = F, data = data19, aes(x = longitude, y = latitude, col = bioma), size = 0.1, shape = 3) +
+    scale_color_manual(values = cbp1) +
+    geom_path(color = 'white', size = 0.1) +
+  geom_path(inherit.aes = F, data = legal_amazon_INPE, mapping = aes(x = longitude, y = latitude), color = "yellow")
+```
+
 
 ```{r}
 modis_fcount <- read.csv("./database/legal_amazon_fc_frp_20191001/Table_MODIS_fire_counts_2003_2019.csv")
 ```
+
+```{r}
+tidy_modis_fcount <- modis_fcount %>% 
+  gather(-`DOY`, key = "year", "value" = fires)
+
+tidy_modis_fcount$year <- as.integer(substr(tidy_modis_fcount$year, 2, 5))
+tidy_modis_fcount$fires <- as.integer(tidy_modis_fcount$fires)
+
+```
+
+```{r}
+ggplotly(tidy_modis_fcount %>% 
+  ggplot(aes(x = DOY, y = fires, color = factor(year))) +
+  geom_line())
+```
+
+```{r}
+modis_avg_frp <- read.csv("./database/legal_amazon_fc_frp_20191001/Table_MODIS_fire_radiative_power_2003_2019.csv")
+```
+
+```{r}
+tidy_modis_avg_frp <- modis_avg_frp %>% 
+  gather(-`DOY`, key = "year", "value" = fires)
+
+tidy_modis_avg_frp$year <- as.integer(substr(tidy_modis_avg_frp$year, 2, 5))
+tidy_modis_avg_frp$fires <- as.integer(tidy_modis_avg_frp$fires)
+```
+
+```{r}
+ggplotly(
+  tidy_modis_avg_frp %>% 
+  ggplot(aes(x = DOY, y = fires, color = factor(year))) +
+  geom_line()
+)
+```
+
 
 
 From NasaPower API we can obtain useful data for about 146 weather and climate parameters, such as:
