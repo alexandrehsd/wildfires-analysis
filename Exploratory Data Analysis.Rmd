@@ -1,6 +1,10 @@
 ---
 title: "WildFires Analysis - Exploratory Data Analysis"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
 ---
 
 ```{r warning=FALSE}
@@ -21,6 +25,7 @@ library(zoo) # Replace NAs in time series analysis
 library(rgdal) # Work with geo-spatial data
 library(sf) # geo-spatial vector data
 library(TSA) # Time Series Analys
+library(qwraps2)# for pretty summary statistics
 ```
 
 
@@ -45,12 +50,57 @@ object_size(df)
 there are 820929 observations in our dataset which sums up to 66.8 MB of storaged data.
 
 ```{r}
-str(df)
+str(data)
 ```
 
+
 ```{r}
-summary(df)
+summary(data)
 ```
+
+
+In order to print a well formatted table of summary statistics, lets write a function to do it
+
+```{r}
+options(qwraps2_markup = "latex")
+my_summary <-
+  list("diasemchuva" =
+       list("min" = ~ min(.data$diasemchuva, na.rm = T),
+            "mediana" = ~ qwraps2::median_iqr(.data$diasemchuva, na_rm = T),
+            "média (desv. padr.)" = ~ qwraps2::mean_sd(.data$diasemchuva, na_rm = T),
+            "máx" = ~ max(.data$diasemchuva, na.rm = T)),
+       "precipitacao" =
+       list("min" = ~ min(.data$precipitacao, na.rm = T),
+            "mediana" = ~ qwraps2::median_iqr(.data$precipitacao, na_rm = T),
+            "média (desv. padr.)" = ~ qwraps2::mean_sd(.data$precipitacao, na_rm = T),
+            "máx" = ~ max(.data$precipitacao, na.rm = T)),
+       "riscofogo" =
+       list("min" = ~ min(.data$riscofogo, na.rm = T),
+            "mediana" = ~ qwraps2::median_iqr(.data$riscofogo, na_rm = T),
+            "média (desv. padr.)" = ~ qwraps2::mean_sd(.data$riscofogo, na_rm = T),
+            "máx" = ~ max(.data$riscofogo, na.rm = T)),
+       "frp" =
+       list("min" = ~ min(.data$frp, na.rm = T),
+            "mediana" = ~ qwraps2::median_iqr(.data$frp, na_rm = T),
+            "média (desv. padr.)" = ~ qwraps2::mean_sd(.data$frp, na_rm = T),
+            "máx" = ~ max(.data$frp, na.rm = T)),
+       "Bioma" =
+       list("Amazônia" = ~ qwraps2::n_perc0(.data$bioma == 'Amazonia'),
+            "Cerrado"  = ~ qwraps2::n_perc0(.data$bioma == 'Cerrado'),
+            "Mata Atlântica"  = ~ qwraps2::n_perc0(.data$bioma == 'Mata Atlantica'),
+            "Pantanal"  = ~ qwraps2::n_perc0(.data$bioma == 'Pantanal'),
+            "Caatinga"  = ~ qwraps2::n_perc0(.data$bioma == 'Caatinga'),
+            "Pampa"  = ~ qwraps2::n_perc0(.data$bioma == 'Pampa')
+       )
+)
+
+### Overall
+pretty_summary <- summary_table(data, my_summary)
+pretty_summary
+
+```
+
+
 
 Aparentemente, A coluna de área industrial e FRP tem poucas entradas não nulas
 
@@ -110,9 +160,38 @@ As we can see, Amazonia represents around half of our dataset. In addition, the 
 -------------------------- Visualisations -----------------------------
 
 ```{r, fig.width = 4, fig.height= 3}
-ggplot(df) + 
-    geom_bar(aes(x = bioma, y = 100*..prop.., group = 1)) +
-    coord_flip()
+# For text in plots see
+# http://r-statistics.co/Complete-Ggplot2-Tutorial-Part2-Customizing-Theme-With-R-Code.html
+# For legend in plots see
+# https://www.datanovia.com/en/blog/ggplot-legend-title-position-and-labels/
+
+proportions <- data %>% group_by(bioma) %>% summarise(n = round(100*n()/nrow(.), 1))
+
+quantities <- as.character(sort(desc(proportions$n)))
+
+ggplot(proportions, aes(x = reorder(bioma, -n), y = n, fill = bioma)) + 
+    geom_bar(stat = "identity") +
+    coord_flip() +
+    labs(title="Proporção de observações por Bioma", y="Proporção %", x="Bioma", caption="Fonte: Elaborado pelo Autor") +
+    theme(plot.title=element_text(size=10, 
+                                      face="bold", 
+                                      family="Arial",
+                                      hjust=0.5,
+                                      lineheight=1.2),  # title
+              plot.subtitle=element_text(size=10, 
+                                         family="Arial",
+                                         face="bold",
+                                         hjust=0.5),  # subtitle
+              axis.title.x=element_text(size=8),  # X axis title
+              axis.title.y=element_text(size=8),  # Y axis title
+              axis.text.x=element_text(size=6,
+                                       vjust=.5),  # X axis text
+              axis.text.y=element_text(size=6),
+              legend.title = element_blank(),
+              legend.position = "none",
+              plot.caption = element_text(size = 6)) + # Y axis text
+              ggsave("/home/alexandre/Documentos/tcc/images/plots_cap3/bioma-proportions.png", dpi = "retina", width = 10, height = 8, units = "cm")
+
 ```
 
 Now, it is also important to get the underlying trend of the number of fire ocurrences through the months of the year. Let's start exploring this idea:
