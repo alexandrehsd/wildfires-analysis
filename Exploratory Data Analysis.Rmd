@@ -32,19 +32,10 @@ library(qwraps2)# for pretty summary statistics
 There are 4 csv files containing data about the fires of all ocurrences around all brazilian territory. Each file has data between 1st Sept to 30th Sept of each year from 2015 to 2019.
 
 ```{r}
-temp <- list.files(path = "./database/modis_15-19" ,pattern = "*.csv")
-myfiles = lapply(paste0("./database/modis_15-19/",temp), read.csv)
-
-nrecords <- lapply(myfiles, nrow)
+temp <- list.files(path = "./database/modis_15-19", pattern = "*.csv")
+myfiles = lapply(paste0("./database/modis_15-19/", temp), read.csv)
 
 data <- bind_rows(myfiles)
-names(data)
-
-# As we have many data records, we'll be working with a small subset of it
-df <- data[sample(nrow(data), 0.1*nrow(data)), ]
-totalNo <- nrow(df)
-
-object_size(df)
 ```
 
 there are 820929 observations in our dataset which sums up to 66.8 MB of storaged data.
@@ -96,7 +87,6 @@ my_summary <-
 
 ### Overall
 pretty_summary <- summary_table(data, my_summary)
-pretty_summary
 
 ```
 
@@ -106,21 +96,17 @@ Aparentemente, A coluna de área industrial e FRP tem poucas entradas não nulas
 
 
 ```{r}
-paste("Percentage of NAs entries on `FRP` =",
-      100*sum(is.na(df$frp))/totalNo)
+total_records <- nrow(data)
 
-wetDays <- df$diasemchuva <= 10
-dryDays <- df$diasemchuva > 10
-noWeatherInfo <- is.na(df$diasemchuva)
+noWeatherInfo <- is.na(data$diasemchuva)
+noFrpInfo <- is.na(data$frp)
+
+paste("Percentage of NAs entries on `FRP` =",
+      round(100 * sum(noFrpInfo) / total_records, 2), "%")
 
 paste("Percentage of NAs entries on `diasemchuva` =",
-      round(100*(sum(noWeatherInfo))/totalNo,2))
+      round(100 * (sum(noWeatherInfo)) / total_records, 2), "%")
 
-paste("Percentage of records with less than (or equal to) 10 days of no rain =",
-      round(100*(sum(wetDays, na.rm = T))/totalNo,2))
-
-paste("Percentage of records with more than 10 days of no rain =",
-      round(100*(sum(dryDays, na.rm = T))/totalNo,2))
 ```
 
 By the last results, it is possible that the number of days with no rain have a huge impact over the fires triggers.
@@ -128,27 +114,27 @@ By the last results, it is possible that the number of days with no rain have a 
 we can also investigate another columns that have either redundant data or not useful data.
 
 ```{r}
-levels(df$pais)
-levels(df$satelite)
+levels(data$pais)
+levels(data$satelite)
 
-df$pais <- NULL
-df$satelite <- NULL
+data$pais <- NULL
+data$satelite <- NULL
 
-object_size(df)
+object_size(data)
 ```
 
 By looking at the structure of our dataframe, it becomes clear that the `Datahora` is a datetime object not a Factor.
 
 ```{r}
-df$datahora <- ymd_hms(str_replace_all(df$datahora,"/","-"))
+data$datahora <- ymd_hms(str_replace_all(data$datahora,"/","-"))
 
-levels(df$bioma)
+levels(data$bioma)
 ```
 
 We have 6 distincts biomas on our dataset. Perhaps, by knowing how is the distribution of fires among different biomas, we can refine our research.
 
 ```{r}
-counts <- table(df$bioma)
+counts <- table(data$bioma)
 counts
 
 proportions <- 100*counts / sum(counts)
@@ -165,6 +151,8 @@ As we can see, Amazonia represents around half of our dataset. In addition, the 
 # For legend in plots see
 # https://www.datanovia.com/en/blog/ggplot-legend-title-position-and-labels/
 
+path_ch3 <- "/home/alexandre/Documentos/tcc/images/plots_cap3/"
+
 proportions <- data %>% group_by(bioma) %>% summarise(n = round(100*n()/nrow(.), 1))
 
 quantities <- as.character(sort(desc(proportions$n)))
@@ -172,6 +160,7 @@ quantities <- as.character(sort(desc(proportions$n)))
 ggplot(proportions, aes(x = reorder(bioma, -n), y = n, fill = bioma)) + 
     geom_bar(stat = "identity") +
     coord_flip() +
+    scale_fill_manual(values = c("#ff5a00", "#999999",  "#ffce00", "#999999", "#999999", "#999999")) +
     labs(title="Proporção de observações por Bioma", y="Proporção %", x="Bioma", caption="Fonte: Elaborado pelo Autor") +
     theme(plot.title=element_text(size=10, 
                                       face="bold", 
@@ -190,21 +179,39 @@ ggplot(proportions, aes(x = reorder(bioma, -n), y = n, fill = bioma)) +
               legend.title = element_blank(),
               legend.position = "none",
               plot.caption = element_text(size = 6)) + # Y axis text
-              ggsave("/home/alexandre/Documentos/tcc/images/plots_cap3/bioma-proportions.png", dpi = "retina", width = 10, height = 8, units = "cm")
+              ggsave(paste0(path_ch3, "bioma-proportions.png"), dpi = "retina", width = 10, height = 8, units = "cm")
 
 ```
 
 Now, it is also important to get the underlying trend of the number of fire ocurrences through the months of the year. Let's start exploring this idea:
 
 ```{r}
-df %>% 
+data %>% 
   mutate(month = floor_date(date(datahora), "month")) %>% 
   group_by(month, bioma) %>% 
   summarise(n_fires = n()) %>% 
   ggplot(aes(x = month, y = n_fires/1000)) +
   geom_bar(aes(fill = bioma), stat = 'identity') + 
     scale_x_date(date_labels = "%b/%y", date_breaks = "6 months") +
-    labs(y = "Number of fires in thousands", title = 'Brazilian Wildfires by Year')
+    labs(y = "Number of fires in thousands", title = 'Brazilian Wildfires by Year') +
+    theme(plot.title=element_text(size=10, 
+                                      face="bold", 
+                                      family="Arial",
+                                      hjust=0.5,
+                                      lineheight=1.2),  # title
+              plot.subtitle=element_text(size=10, 
+                                         family="Arial",
+                                         face="bold",
+                                         hjust=0.5),  # subtitle
+              axis.title.x=element_text(size=8),  # X axis title
+              axis.title.y=element_text(size=8),  # Y axis title
+              axis.text.x=element_text(size=6,
+                                       vjust=.5),  # X axis text
+              axis.text.y=element_text(size=6),
+              legend.title = element_blank(),
+              legend.position = "none",
+              plot.caption = element_text(size = 6)) + # Y axis text
+              ggsave(paste0(path_ch3, "bioma-proportions.png"), dpi = "retina", width = 10, height = 8, units = "cm")
 ```
 
 In order to plot the number of fires by state, we must do some data wrangling to put the data in the desired format.
@@ -633,18 +640,19 @@ tidy %>%
   scale_y_continuous("Number of fires")
 ```
 
-As seen before, our dataset lacks of 70% information about the fire radiative power of fires. In order to analyze 
-this variable with confident outcomes, we need other data sources. From data collected from Nasa Modis project it is possible to enhance the analysis with much more data.
+
+---------------------------------------------- FIRMS DATA -------------------------------------  
+
+
+As seen before, our dataset lacks of 70% information about the fire radiative power of fires. In order to analyze this variable with confident outcomes, we need other data sources. From data collected from Nasa Modis project it is possible to enhance the analysis with much more data.
 
 ```{r}
 # Find the documentation at https://earthdata.nasa.gov/earth-observation-data/near-real-time/firms/active-fire-data
-
-# Load the archived data (before 1st aug/19)
+# Load standard science quality data (before 1st aug/19)
 nasaModis1 <-  read.csv("./database/DL_FIRE_M6_79475/fire_archive_M6_79475.csv")
 
-# Load non standard science quality data (after 1st aug/19)
+# Load NRT  (after 1st aug/19)
 nasaModis2 <- read.csv("./database/DL_FIRE_M6_79475/fire_nrt_M6_79475.csv")
-
 ```
 
 ```{r}
