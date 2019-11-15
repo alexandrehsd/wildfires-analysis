@@ -546,6 +546,81 @@ top10 %>%
 ```
 
 
+```{r}
+# Sampling 25 percent of the whole data set to make some exploratory graphs
+sample <- sample_frac(data, 0.25)
+
+```
+
+```{r}
+
+data %>% 
+  select(riscofogo, diasemchuva, precipitacao) %>% 
+  filter(sample$diasemchuva != 0, sample$riscofogo != 0, sample$precipitacao != 0) %>% 
+ggplot(aes(x=riscofogo, y=precipitacao) ) +
+  stat_density_2d(aes(fill = ..density..), geom = "raster", contour = F) +
+  scale_fill_distiller(palette=1, direction=1) +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  ylim(0, 50) +
+  labs(title="Densidade por área", subtitle = "risco de fogo vs. precipitação (mm)", y="Precipitação (mm)", x= "Indíce de risco de fogo", caption="Fonte: Elaborado pelo Autor") +
+    theme(plot.title=element_text(size=10, 
+                                      face="bold", 
+                                      family="Arial",
+                                      hjust=0.5,
+                                      lineheight=1.2),  # title
+              plot.subtitle=element_text(size=8, 
+                                         family="Arial",
+                                         face="bold",
+                                         hjust=0.5),  # subtitle
+              axis.title.x=element_text(size=8),  # X axis title
+              axis.title.y=element_text(size=8),  # Y axis title
+              axis.text.x=element_text(size=5,
+                                       vjust=.5),  # X axis text
+              axis.text.y=element_text(size=4),
+              legend.title = element_blank(),
+              legend.text = element_text(size = 4),
+              legend.justification=c(0, 1), 
+              legend.key.width= unit(0.6, "lines"), 
+              legend.key.height = unit(0.6, "lines"),
+              legend.position = c(0.9, 0.6),
+              plot.caption = element_text(size = 6)) + # Y axis text
+              ggsave(paste0(path_ch4, "density-PrecipRiscoFogo.png"), dpi = "retina", width = 12, height = 8, units = "cm")
+  
+```
+
+```{r}
+data %>% 
+  ggplot(aes(x = riscofogo, y = precipitacao)) +
+  geom_point(alpha = 1/300, na.rm = T ) +
+  ylim(0, 50) +
+  labs(title="Gráfico de dispersão", subtitle = "risco de fogo vs. precipitação (mm)", y="Precipitação (mm)", x= "Indíce de risco de fogo", caption="Fonte: Elaborado pelo Autor") +
+    theme(plot.title=element_text(size=10, 
+                                      face="bold", 
+                                      family="Arial",
+                                      hjust=0.5,
+                                      lineheight=1.2),  # title
+              plot.subtitle=element_text(size=8, 
+                                         family="Arial",
+                                         face="bold",
+                                         hjust=0.5),  # subtitle
+              axis.title.x=element_text(size=8),  # X axis title
+              axis.title.y=element_text(size=8),  # Y axis title
+              axis.text.x=element_text(size=5,
+                                       vjust=.5),  # X axis text
+              axis.text.y=element_text(size=4),
+              legend.title = element_blank(),
+              legend.text = element_text(size = 4),
+              legend.justification=c(0, 1), 
+              legend.key.width= unit(0.6, "lines"), 
+              legend.key.height = unit(0.6, "lines"),
+              legend.position = c(0.9, 0.6),
+              plot.caption = element_text(size = 6)) + # Y axis text
+              ggsave(paste0(path_ch4, "scatter-PrecRiscoFogo.png"), dpi = "retina", width = 12, height = 8, units = "cm")
+```
+
+
+
 In terms of raw numbers, we can visualize this difference below.
 
 ```{r}
