@@ -36,9 +36,12 @@ temp <- list.files(path = "./database/modis_15-19", pattern = "*.csv")
 myfiles = lapply(paste0("./database/modis_15-19/", temp), read.csv)
 
 data <- bind_rows(myfiles)
+
+rm(temp)
+rm(myfiles)
 ```
 
-there are 820929 observations in our dataset which sums up to 66.8 MB of storaged data.
+there are 885117 observations in our dataset which sums up to 70 MB of storaged data.
 
 ```{r}
 str(data)
@@ -48,7 +51,6 @@ str(data)
 ```{r}
 summary(data)
 ```
-
 
 In order to print a well formatted table of summary statistics, lets write a function to do it
 
@@ -90,10 +92,7 @@ pretty_summary <- summary_table(data, my_summary)
 
 ```
 
-
-
 Aparentemente, A coluna de área industrial e FRP tem poucas entradas não nulas
-
 
 ```{r}
 total_records <- nrow(data)
@@ -123,7 +122,7 @@ data$satelite <- NULL
 object_size(data)
 ```
 
-By looking at the structure of our dataframe, it becomes clear that the `Datahora` is a datetime object not a Factor.
+By looking at the structure of our dataframe, it becomes clear that the `datahora` is a datetime object not a Factor.
 
 ```{r}
 data$datahora <- ymd_hms(str_replace_all(data$datahora,"/","-"))
@@ -137,7 +136,7 @@ We have 6 distincts biomas on our dataset. Perhaps, by knowing how is the distri
 counts <- table(data$bioma)
 counts
 
-proportions <- 100*counts / sum(counts)
+proportions <- 100 * counts / sum(counts)
 proportions
 ```
 
@@ -148,10 +147,11 @@ As we can see, Amazonia represents around half of our dataset. In addition, the 
 ```{r, fig.width = 4, fig.height= 3}
 # For text in plots see
 # http://r-statistics.co/Complete-Ggplot2-Tutorial-Part2-Customizing-Theme-With-R-Code.html
+
 # For legend in plots see
 # https://www.datanovia.com/en/blog/ggplot-legend-title-position-and-labels/
 
-path_ch3 <- "/home/alexandre/Documentos/tcc/images/plots_cap3/"
+path_ch4 <- "/home/alexandre/Documentos/tcc/images/plots_cap4/"
 
 proportions <- data %>% group_by(bioma) %>% summarise(n = round(100*n()/nrow(.), 1))
 
@@ -178,22 +178,21 @@ ggplot(proportions, aes(x = reorder(bioma, -n), y = n, fill = bioma)) +
               axis.text.y=element_text(size=6),
               legend.title = element_blank(),
               legend.position = "none",
-              plot.caption = element_text(size = 6)) + # Y axis text
-              ggsave(paste0(path_ch3, "bioma-proportions.png"), dpi = "retina", width = 10, height = 8, units = "cm")
+              plot.caption = element_text(size = 6)) # Y axis text
+              # ggsave(paste0(path_ch4, "bioma-proportions.png"), dpi = "retina", width = 10, height = 8, units = "cm")
 
 ```
 
-Now, it is also important to get the underlying trend of the number of fire ocurrences through the months of the year. Let's start exploring this idea:
+----------------------- DETECTING SEASONALITY
 
 ```{r}
 data %>% 
-  mutate(month = floor_date(date(datahora), "month")) %>% 
-  group_by(month, bioma) %>% 
-  summarise(n_fires = n()) %>% 
-  ggplot(aes(x = month, y = n_fires/1000)) +
-  geom_bar(aes(fill = bioma), stat = 'identity') + 
-    scale_x_date(date_labels = "%b/%y", date_breaks = "6 months") +
-    labs(y = "Focos de incêndios (milhares)", title = 'Focos de incêndio no Brasil por mês') +
+  mutate(date = date(datahora)) %>% 
+  group_by(date) %>% 
+  ggplot(aes(x = date, group = 1)) +
+   geom_freqpoly(stat = "count") +
+   scale_x_date(date_breaks = "6 months", date_labels = "%b/%y") +
+   labs(y = "Quantidade de incêndios", x = "Mês/Ano", title = 'Quantidade de incêndios por dia',  caption="Fonte: Elaborado pelo Autor") +
     theme(plot.title=element_text(size=10, 
                                       face="bold", 
                                       family="Arial",
@@ -210,8 +209,170 @@ data %>%
               axis.text.y=element_text(size=6),
               legend.title = element_blank(),
               legend.position = "none",
+              plot.caption = element_text(size = 8)) # Y axis text
+              # ggsave(paste0(path_ch4, "count-byDay.png"), dpi = "retina", width = 10, height = 8, units = "cm")
+```
+
+As we can see above, our data presents strong patterns (seasonality). By doing a Fourier Transform, it is possible get to know what are the main frequencies of this time series.
+
+```{r}
+sinal_INPE <- data %>% 
+  mutate(date = date(datahora)) %>% 
+  group_by(date) %>%
+  summarise(n = n())
+
+p <- periodogram(sinal_INPE$n, plot = F)
+
+dd = data.frame(freq=p$freq, spec=p$spec)
+order = dd[order(-dd$spec),]
+top3 = head(order, 3)
+
+# frequências com 3 maiores potências
+top3
+```
+
+```{r}
+time <- 1/top3$freq
+time
+```
+
+```{r}
+
+freqs <- dd %>% arrange(desc(dd$spec)) %>% filter(freq <= 0.1)
+
+freqs %>% ggplot(mapping = aes(x = freq, y = spec)) +
+  geom_bar(stat = "identity") +
+  labs(y = "Potência", x = "Frequência (Hz)", title = 'Densidade Espectral de Potência',      caption="Fonte: Elaborado pelo Autor") +
+  theme(plot.title=element_text(size=10, 
+                                      face="bold", 
+                                      family="Arial",
+                                      hjust=0.5,
+                                      lineheight=1.2),  # title
+              plot.subtitle=element_text(size=10, 
+                                         family="Arial",
+                                         face="bold",
+                                         hjust=0.5),  # subtitle
+              axis.title.x=element_text(size=8),  # X axis title
+              axis.title.y=element_text(size=8),  # Y axis title
+              axis.text.x=element_text(size=6,
+                                       vjust=.5),  # X axis text
+              axis.text.y=element_text(size=6),
+              legend.title = element_blank(),
+              legend.position = "none",
+              plot.caption = element_text(size = 8)) # Y axis text
+              # ggsave(paste0(path_ch4, "psd.png"), dpi = "retina", width = 10, height = 8, units = "cm")
+```
+
+Therefore, the seasonality of our dataset is given by annualy, semesterly and quaterly periods. For reference, see https://anomaly.io/detect-seasonality-using-fourier-transform-r/index.html and http://www.di.fc.ul.pt/~jpn/r/fourier/fourier.html
+
+Now, it is also important to get the underlying trend of the number of fire ocurrences through the months of the year. Let's start exploring this idea:
+
+```{r}
+
+# Capitalizes names
+
+capitalize <- function(x) {
+  s <- strsplit(x, " ")[[1]]
+  paste(toupper(substring(s, 1,1)), substring(s, 2),
+      sep="", collapse=" ")
+}
+
+levels <- c("Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez")
+
+temp <- data %>% 
+  transmute(mes = factor(sapply(substr(months(data$datahora), 1, 3), capitalize), levels = levels),
+         ano = factor(year(datahora))) %>%
+  group_by(ano, mes)
+
+cold_dfs <- list()
+for (i in 1:5) {
+  cold_dfs[[i]] <- temp %>% 
+    filter(!mes %in% c("Jan", "Fev", "Mar", "Abr", "Mai", "Dez"), ano == (i + 2014))
+  cold_dfs[[i]]$color <- paste0("cold", i)
+}
+
+hot_dfs <- list()
+for (i in 1:5) {
+  hot_dfs[[i]] <- temp %>% 
+    filter(!mes %in% c("Jun", "Jul", "Ago", "Set", "Out", "Nov"), ano == (i + 2014))
+  hot_dfs[[i]]$color <- paste0("hot", i)
+}
+
+colors_df <- bind_rows(cold_dfs, hot_dfs) %>% 
+  group_by(ano, mes, color) %>% 
+  summarise(n = n()) %>% 
+  mutate(ano_abb = as.factor(as.numeric(as.character(ano)) %% 2000))
+
+dodge <- position_dodge(width = 0.9)
+
+colors_df %>%
+  ggplot(aes(x = mes, y = n)) +
+  geom_bar(stat = "identity", position = dodge, aes(fill = color)) +
+  # geom_text(aes(label = ano_abb), position = dodge,
+            # size = 1.5, inherit.aes = T) +
+  scale_colour_manual("Ano", values = c(cold1 = "#b7a8c1", cold2 = "#c7b4cc", 
+                                        cold3 ="#d7c0d7", cold4 = "#e7cce2", cold5 = "#f7d8ed",
+                                        hot1 = "#ff4949", hot2 = "#ff6549", 
+                                        hot3 ="#ff8049", hot4 = "#ff9c49", hot5 = "#ffb749")) +
+  labs(y = "Quantidade de incêndios", x = "Mês", title = 'Quantidade mensal de incêndios',  caption="Fonte: Elaborado pelo Autor") +
+    theme(plot.title=element_text(size=10, 
+                                  face="bold", 
+                                  family="Arial",
+                                  hjust=0.5,
+                                  lineheight=1.2),  # title
+          plot.subtitle=element_text(size=10, 
+                                  family="Arial",
+                                  face="bold",
+                                  hjust=0.5),  # subtitle
+          axis.title.x=element_text(size=8),  # X axis title
+          axis.title.y=element_text(size=8),  # Y axis title
+          axis.text.x=element_text(size=6,
+                                   vjust=.5),  # X axis text
+          axis.text.y=element_text(size=6),
+          legend.title = element_blank(),
+          legend.position = "none",
+          plot.caption = element_text(size = 8)) # Y axis text
+              # ggsave(paste0(path_ch4, "count-byMonth.png"), dpi = "retina", width = 10, height = 8, units = "cm")
+
+rm(temp)
+# rm(colors_df)
+
+```
+
+
+```{r}
+data %>% 
+  mutate(month = floor_date(date(datahora), "month")) %>% 
+  group_by(month, bioma) %>% 
+  summarise(n_fires = n()) %>% 
+  ggplot(aes(x = month, y = n_fires/1000)) +
+  geom_bar(aes(fill = bioma), stat = 'identity') + 
+    scale_x_date(date_labels = "%b/%y", date_breaks = "6 months") +
+    labs(y = "Focos de incêndios (milhares)", x = "Mês/Ano", title = 'Participação de cada Bioma em incêndios/mês', caption="Fonte: Elaborado pelo Autor") +
+    guides(fill = guide_legend(title = "Bioma", override.aes = list(size = 0.5))) +
+    theme(plot.title=element_text(size=9, 
+                                      face="bold", 
+                                      family="Arial",
+                                      hjust=0.5,
+                                      lineheight=1.2),  # title
+              plot.subtitle=element_text(size=9, 
+                                         family="Arial",
+                                         face="bold",
+                                         hjust=0.5),  # subtitle
+              axis.title.x=element_text(size=7),  # X axis title
+              axis.title.y=element_text(size=7),  # Y axis title
+              axis.text.x=element_text(size=5,
+                                       vjust=.5),  # X axis text
+              axis.text.y=element_text(size=5),
+              legend.position=c(1,1), 
+              legend.justification=c(0, 1), 
+              legend.key.width= unit(0.4, "lines"), 
+              legend.key.height = unit(0.4, "lines"),
+              plot.margin = unit(c(1, 5, 0.5, 0.5), "lines"),
+              legend.title = element_text(size = 4),
+              legend.text = element_text(size = 3),
               plot.caption = element_text(size = 6)) + # Y axis text
-              ggsave(paste0(path_ch3, "trends-byMonthbyBioma.png"), dpi = "retina", width = 10, height = 8, units = "cm")
+              ggsave(paste0(path_ch4, "trends-byMonthbyBiomabyYear.png"), dpi = "retina", width = 10, height = 8, units = "cm")
 ```
 
 In order to plot the number of fires by state, we must do some data wrangling to put the data in the desired format.
@@ -256,11 +417,11 @@ maps_df <- list()
 ```{r}
 # the `estado` column of the map dataframe is a character, so in order
 # to avoid coertion from factor to character, let's convert it explicitly
-df$estado <- as.character(df$estado)
+data$estado <- as.character(data$estado)
 ```
 
 ```{r}
-df %>% 
+data %>% 
   select(estado) %>% 
   group_by(estado) %>% 
   summarise(n = n()) %>% 
@@ -270,8 +431,30 @@ df %>%
     geom_path(color = 'white', size = 0.1) + 
     scale_fill_continuous(low = "orange", 
                           high = "darkred",
-                          name = 'Number of fires\n(thousands)'
-                          ) 
+                          name = 'Nº de incêndios (milhares)'
+                          ) +
+  labs(title = 'Incêndios por Estado', subtitle = "Janeiro/2015 a Setembro/2019", caption="Fonte: Elaborado pelo Autor" ) +
+    theme(plot.title=element_text(size=9, 
+                                      face="bold", 
+                                      family="Arial",
+                                      hjust=0.5,
+                                      lineheight=1.2),  # title
+              plot.subtitle=element_text(size=7, 
+                                         family="Arial",
+                                         face="bold",
+                                         hjust=0.5),  # subtitle
+              axis.title = element_blank(),
+              axis.text = element_blank(), 
+              axis.ticks = element_blank(),
+              legend.position=c(1,1), 
+              legend.justification=c(0, 1), 
+              legend.key.width= unit(0.4, "lines"), 
+              legend.key.height = unit(0.4, "lines"),
+              plot.margin = unit(c(1, 5, 0.5, 0.5), "lines"),
+              legend.title = element_text(size = 4),
+              legend.text = element_text(size = 3),
+              plot.caption = element_text(size = 6)) +
+  ggsave(paste0(path_ch4, "map-byState.png"), dpi = "retina", width = 10, height = 8, units = "cm")
 ```
 
 As we can see, the state with the most fire ocurrences is Pará in which most of its lands belongs to the amazon ecossystem, this may explain why half the dataset ocurrences comes from Amazon fires.
@@ -279,26 +462,94 @@ As we can see, the state with the most fire ocurrences is Pará in which most of
 As we can see below, this trend happens all years.
 
 ```{r}
-df %>% 
+
+byYear_df <- data %>% 
   select(estado, datahora) %>% 
   mutate(ano = year(datahora)) %>% 
   group_by(estado, ano) %>% 
   summarise(n = n()) %>% 
-  right_join(map_df, by = 'estado') %>% 
+  right_join(map_df, by = 'estado')
+
+byYear_df %>% 
   ggplot(aes(x = longitude, y = latitude, group = codigo, fill = n/1000)) + 
     geom_polygon() +
     facet_wrap(~ano) +
     geom_path(color = 'white', size = 0.1) + 
     scale_fill_continuous(low = "orange", 
                           high = "darkred",
-                          name = 'Number of fires\n(thousands)'
-                          ) 
+                          name = 'Números de incêndios\n(milhares)'
+                          )  +
+  labs(title = 'Incêndios por Estado a cada ano', caption="Fonte: Elaborado pelo Autor" ) +
+    theme(plot.title=element_text(size=9, 
+                                      face="bold", 
+                                      family="Arial",
+                                      hjust=0.5,
+                                      lineheight=1.2),  # title
+              plot.subtitle=element_text(size=7, 
+                                         family="Arial",
+                                         face="bold",
+                                         hjust=0.5),  # subtitle
+              axis.title = element_blank(),
+              axis.text = element_blank(), 
+              axis.ticks = element_blank(),
+              legend.position=c(0.7, 0.5), 
+              legend.justification=c(0, 1), 
+              legend.key.width= unit(0.6, "lines"), 
+              legend.key.height = unit(0.6, "lines"),
+              legend.title = element_text(size = 6),
+              legend.text = element_text(size = 4),
+              plot.caption = element_text(size = 6))
+  # ggsave(paste0(path_ch4, "map-byStateEachYear.pngx"), dpi = "retina", width = 10, height = 8, units ="cm")
+
+rm(byYear_df)
 ```
+
+```{r}
+
+top10 <- data %>% 
+  group_by(municipio, estado) %>% 
+  summarise(n = n()) %>% 
+  top_n(1, n) %>% 
+  arrange(desc(n))
+
+top10 <- top10[1:10,]
+top10 %>% 
+  ggplot(aes(x = reorder(municipio, -n), y = n, fill = estado)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = n), 
+            size = 2, inherit.aes = T, hjust = 2) +
+  coord_flip() +
+  labs(title="10 municípios com maior ocorrência de focos de incêndio", subtitle = "em todo o período de Jan/15 a Set/19", y="Nº de incêndios", x= "Município", caption="Fonte: Elaborado pelo Autor") +
+  guides(fill = guide_legend(title = "Estado", override.aes = list(size = 0.5))) +
+    theme(plot.title=element_text(size=10, 
+                                      face="bold", 
+                                      family="Arial",
+                                      hjust=0.5,
+                                      lineheight=1.2),  # title
+              plot.subtitle=element_text(size=8, 
+                                         family="Arial",
+                                         face="bold",
+                                         hjust=0.5),  # subtitle
+              axis.title.x=element_text(size=8),  # X axis title
+              axis.title.y=element_text(size=8),  # Y axis title
+              axis.text.x=element_text(size=5,
+                                       vjust=.5),  # X axis text
+              axis.text.y=element_text(size=4),
+              legend.justification=c(0, 1), 
+              legend.key.width= unit(0.6, "lines"), 
+              legend.key.height = unit(0.6, "lines"),
+              legend.title = element_text(size = 6),
+              legend.text = element_text(size = 4),
+              legend.position = c(0.7, 0.9),
+              plot.caption = element_text(size = 6)) + # Y axis text
+              ggsave(paste0(path_ch4, "count-byCounty.png"), dpi = "retina", width = 12, height = 8, units = "cm")
+```
+
 
 In terms of raw numbers, we can visualize this difference below.
 
 ```{r}
-df %>% 
+data %>% 
   group_by(estado) %>% 
   ggplot(aes(x = factor(estado))) +
     geom_bar() +
@@ -340,7 +591,7 @@ maps_df_counties <- list()
 ```
 
 ```{r}
-df %>% 
+data %>% 
   select(municipio) %>% 
   group_by(municipio) %>% 
   summarise(n = n()) %>% 
@@ -357,7 +608,7 @@ df %>%
 What about that total number of fire ocurrences by state? From when does it come from?
 
 ```{r}
-df %>% 
+data %>% 
   mutate(ano = year(datahora)) %>% 
   group_by(estado, ano) %>% 
   ggplot(aes(x = factor(estado), fill = factor(ano))) +
@@ -368,7 +619,7 @@ df %>%
 Let's repeat the last plot, but now considering the proportions
 
 ```{r}
-df %>% 
+data %>% 
   mutate(ano = year(datahora)) %>% 
   group_by(estado, ano) %>% 
   ggplot(aes(x = factor(estado), fill = factor(ano))) +
@@ -378,27 +629,17 @@ df %>%
 
 Let's reinforce what we've seen by far and plot the data considering a monthly frequency
 
-```{r}
-# Capitalizes names
-
-capitalize <- function(x) {
-  s <- strsplit(x, " ")[[1]]
-  paste(toupper(substring(s, 1,1)), substring(s, 2),
-      sep="", collapse=" ")
-}
-```
-
 
 ```{r}
 levels <- c("Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro")
 
-df %>% 
+data %>% 
   mutate(mes = factor(sapply(months(datahora), capitalize), levels = levels)) %>%
   group_by(mes) %>%
   ggplot(aes(x = factor(mes), y = 100*..prop.., group = 1)) +
     geom_bar()
 
-df %>% 
+data %>% 
   mutate(mes = factor(sapply(months(datahora), capitalize), levels = levels),
          ano = factor(year(datahora))) %>%
   group_by(ano, mes) %>%
@@ -408,144 +649,6 @@ df %>%
 ```
 
 As we can see, in 2019 the trend was a bit different, maybe it is so because of the popular protests against the liberal and progressive view of brazilian government towards amazonia.
-
-Let's compact this plot in only one frame:
-
-
-```{r}
-
-levels <- c("Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez")
-
-temp <- data %>% 
-  transmute(mes = factor(sapply(substr(months(data$datahora), 1, 3), capitalize), levels = levels),
-         ano = factor(year(datahora))) %>%
-  group_by(ano, mes)
-
-cold_dfs <- list()
-for (i in 1:5) {
-  cold_dfs[[i]] <- temp %>% 
-    filter(!mes %in% c("Jan", "Fev", "Mar", "Abr", "Mai", "Dez"), ano == (i + 2014))
-  cold_dfs[[i]]$color <- paste0("cold", i)
-}
-
-hot_dfs <- list()
-for (i in 1:5) {
-  hot_dfs[[i]] <- temp %>% 
-    filter(!mes %in% c("Jun", "Jul", "Ago", "Set", "Out", "Nov"), ano == (i + 2014))
-  hot_dfs[[i]]$color <- paste0("hot", i)
-}
-
-colors_df <- bind_rows(cold_dfs, hot_dfs)
-
-colors_df %>%
-  ggplot(aes(x = mes)) +
-  geom_bar(position = "dodge", aes(fill = color)) +
-  scale_colour_manual("Ano", values = c(cold1 = "#b7a8c1", cold2 = "#c7b4cc", 
-                                        cold3 ="#d7c0d7", cold4 = "#e7cce2", cold5 = "#f7d8ed",
-                                        hot1 = "#ff4949", hot2 = "#ff6549", 
-                                        hot3 ="#ff8049", hot4 = "#ff9c49", hot5 = "#ffb749")) +
-  labs(y = "Quantidade de incêndios", x = "Mês", title = 'Quantidade mensal de incêndios',  caption="Fonte: Elaborado pelo Autor") +
-    theme(plot.title=element_text(size=10, 
-                                      face="bold", 
-                                      family="Arial",
-                                      hjust=0.5,
-                                      lineheight=1.2),  # title
-              plot.subtitle=element_text(size=10, 
-                                         family="Arial",
-                                         face="bold",
-                                         hjust=0.5),  # subtitle
-              axis.title.x=element_text(size=8),  # X axis title
-              axis.title.y=element_text(size=8),  # Y axis title
-              axis.text.x=element_text(size=6,
-                                       vjust=.5),  # X axis text
-              axis.text.y=element_text(size=6),
-              legend.title = element_blank(),
-              legend.position = "none",
-              plot.caption = element_text(size = 8)) + # Y axis text
-              ggsave(paste0(path_ch3, "count-byMonth.png"), dpi = "retina", width = 10, height = 8, units = "cm")
-
-```
-
-```{r}
-data %>% 
-  mutate(date = date(datahora)) %>% 
-  group_by(date) %>% 
-  ggplot(aes(x = date, group = 1)) +
-   geom_freqpoly(stat = "count") +
-   scale_x_date(date_breaks = "6 months", date_labels = "%b/%y") +
-   labs(y = "Quantidade de incêndios", x = "Mês/Ano", title = 'Quantidade de incêndios por dia',  caption="Fonte: Elaborado pelo Autor") +
-    theme(plot.title=element_text(size=10, 
-                                      face="bold", 
-                                      family="Arial",
-                                      hjust=0.5,
-                                      lineheight=1.2),  # title
-              plot.subtitle=element_text(size=10, 
-                                         family="Arial",
-                                         face="bold",
-                                         hjust=0.5),  # subtitle
-              axis.title.x=element_text(size=8),  # X axis title
-              axis.title.y=element_text(size=8),  # Y axis title
-              axis.text.x=element_text(size=6,
-                                       vjust=.5),  # X axis text
-              axis.text.y=element_text(size=6),
-              legend.title = element_blank(),
-              legend.position = "none",
-              plot.caption = element_text(size = 8)) + # Y axis text
-              ggsave(paste0(path_ch3, "count-byDay.png"), dpi = "retina", width = 10, height = 8, units = "cm")
-```
-
-As we can see above, our data presents strong patterns (seasonality). By doing a Fourier Transform, it is possible get to know what are the main frequencies of this time series.
-
-```{r}
-signal_INPE <- data %>% 
-  mutate(date = date(datahora)) %>% 
-  group_by(date) %>%
-  summarise(n = n())
-
-p <- periodogram(signal_INPE$n, ylab = "Periodograma", xlab = "Frequência", lwd = 1.5)
-
-dd = data.frame(freq=p$freq, spec=p$spec)
-order = dd[order(-dd$spec),]
-top3 = head(order, 3)
-
-# display the 2 highest "power" frequencies
-top3
-```
-
-```{r}
-time <- 1/top3$freq
-time
-```
-
-```{r}
-
-freqs <- dd %>% arrange(desc(dd$spec)) %>% filter(freq <= 0.1)
-
-freqs %>% ggplot(mapping = aes(x = freq, y = spec)) +
-  geom_bar(stat = "identity") +
-  labs(y = "Potência", x = "Frequência (Hz)", title = 'Densidade Espectral de Potência',      caption="Fonte: Elaborado pelo Autor") +
-  theme(plot.title=element_text(size=10, 
-                                      face="bold", 
-                                      family="Arial",
-                                      hjust=0.5,
-                                      lineheight=1.2),  # title
-              plot.subtitle=element_text(size=10, 
-                                         family="Arial",
-                                         face="bold",
-                                         hjust=0.5),  # subtitle
-              axis.title.x=element_text(size=8),  # X axis title
-              axis.title.y=element_text(size=8),  # Y axis title
-              axis.text.x=element_text(size=6,
-                                       vjust=.5),  # X axis text
-              axis.text.y=element_text(size=6),
-              legend.title = element_blank(),
-              legend.position = "none",
-              plot.caption = element_text(size = 8)) + # Y axis text
-              ggsave(paste0(path_ch3, "psd.png"), dpi = "retina", width = 10, height = 8, units = "cm")
-```
-
-
-Therefore, the seasonality of our dataset is given by annualy, semesterly and quaterly periods. For reference, see https://anomaly.io/detect-seasonality-using-fourier-transform-r/index.html and http://www.di.fc.ul.pt/~jpn/r/fourier/fourier.html
 
 Strangely, our dataset only has records of fire occurences from 3 to 6 pm. Why is it?
 
@@ -601,7 +704,6 @@ temp %>%
                           name = 'Number of fires\n(thousands)'
                           ) 
 ```
-
 
 
 ```{r}
