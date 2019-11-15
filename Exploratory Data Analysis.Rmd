@@ -85,7 +85,7 @@ my_summary <-
        )
 )
 
-### Overall
+### Overall - output is a latex text
 pretty_summary <- summary_table(data, my_summary)
 
 ```
@@ -193,7 +193,7 @@ data %>%
   ggplot(aes(x = month, y = n_fires/1000)) +
   geom_bar(aes(fill = bioma), stat = 'identity') + 
     scale_x_date(date_labels = "%b/%y", date_breaks = "6 months") +
-    labs(y = "Number of fires in thousands", title = 'Brazilian Wildfires by Year') +
+    labs(y = "Focos de incêndios (milhares)", title = 'Focos de incêndio no Brasil por mês') +
     theme(plot.title=element_text(size=10, 
                                       face="bold", 
                                       family="Arial",
@@ -211,7 +211,7 @@ data %>%
               legend.title = element_blank(),
               legend.position = "none",
               plot.caption = element_text(size = 6)) + # Y axis text
-              ggsave(paste0(path_ch3, "bioma-proportions.png"), dpi = "retina", width = 10, height = 8, units = "cm")
+              ggsave(paste0(path_ch3, "trends-byMonthbyBioma.png"), dpi = "retina", width = 10, height = 8, units = "cm")
 ```
 
 In order to plot the number of fires by state, we must do some data wrangling to put the data in the desired format.
@@ -411,46 +411,98 @@ As we can see, in 2019 the trend was a bit different, maybe it is so because of 
 
 Let's compact this plot in only one frame:
 
+
 ```{r}
 
 levels <- c("Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez")
 
-df %>% 
-  mutate(mes = factor(sapply(substr(months(df$datahora), 1, 3), capitalize), levels = levels),
+temp <- data %>% 
+  transmute(mes = factor(sapply(substr(months(data$datahora), 1, 3), capitalize), levels = levels),
          ano = factor(year(datahora))) %>%
-  group_by(ano, mes) %>%
-  ggplot(aes(x = mes, fill = ano)) +
-    geom_bar() + 
-    facet_wrap(~ano) +
-    coord_flip()
+  group_by(ano, mes)
 
-df %>% 
-  mutate(mes = factor(sapply(substr(months(df$datahora), 1, 3), capitalize), levels = levels),
-         ano = factor(year(datahora))) %>%
-  group_by(ano, mes) %>%
-  ggplot(aes(x = mes, fill = ano)) +
-    geom_bar(position = "dodge")
+cold_dfs <- list()
+for (i in 1:5) {
+  cold_dfs[[i]] <- temp %>% 
+    filter(!mes %in% c("Jan", "Fev", "Mar", "Abr", "Mai", "Dez"), ano == (i + 2014))
+  cold_dfs[[i]]$color <- paste0("cold", i)
+}
+
+hot_dfs <- list()
+for (i in 1:5) {
+  hot_dfs[[i]] <- temp %>% 
+    filter(!mes %in% c("Jun", "Jul", "Ago", "Set", "Out", "Nov"), ano == (i + 2014))
+  hot_dfs[[i]]$color <- paste0("hot", i)
+}
+
+colors_df <- bind_rows(cold_dfs, hot_dfs)
+
+colors_df %>%
+  ggplot(aes(x = mes)) +
+  geom_bar(position = "dodge", aes(fill = color)) +
+  scale_colour_manual("Ano", values = c(cold1 = "#b7a8c1", cold2 = "#c7b4cc", 
+                                        cold3 ="#d7c0d7", cold4 = "#e7cce2", cold5 = "#f7d8ed",
+                                        hot1 = "#ff4949", hot2 = "#ff6549", 
+                                        hot3 ="#ff8049", hot4 = "#ff9c49", hot5 = "#ffb749")) +
+  labs(y = "Quantidade de incêndios", x = "Mês", title = 'Quantidade mensal de incêndios',  caption="Fonte: Elaborado pelo Autor") +
+    theme(plot.title=element_text(size=10, 
+                                      face="bold", 
+                                      family="Arial",
+                                      hjust=0.5,
+                                      lineheight=1.2),  # title
+              plot.subtitle=element_text(size=10, 
+                                         family="Arial",
+                                         face="bold",
+                                         hjust=0.5),  # subtitle
+              axis.title.x=element_text(size=8),  # X axis title
+              axis.title.y=element_text(size=8),  # Y axis title
+              axis.text.x=element_text(size=6,
+                                       vjust=.5),  # X axis text
+              axis.text.y=element_text(size=6),
+              legend.title = element_blank(),
+              legend.position = "none",
+              plot.caption = element_text(size = 8)) + # Y axis text
+              ggsave(paste0(path_ch3, "count-byMonth.png"), dpi = "retina", width = 10, height = 8, units = "cm")
 
 ```
 
 ```{r}
-df %>% 
+data %>% 
   mutate(date = date(datahora)) %>% 
   group_by(date) %>% 
   ggplot(aes(x = date, group = 1)) +
    geom_freqpoly(stat = "count") +
-   scale_x_date(date_breaks = "6 months", date_labels = "%b/%y")
+   scale_x_date(date_breaks = "6 months", date_labels = "%b/%y") +
+   labs(y = "Quantidade de incêndios", x = "Mês/Ano", title = 'Quantidade de incêndios por dia',  caption="Fonte: Elaborado pelo Autor") +
+    theme(plot.title=element_text(size=10, 
+                                      face="bold", 
+                                      family="Arial",
+                                      hjust=0.5,
+                                      lineheight=1.2),  # title
+              plot.subtitle=element_text(size=10, 
+                                         family="Arial",
+                                         face="bold",
+                                         hjust=0.5),  # subtitle
+              axis.title.x=element_text(size=8),  # X axis title
+              axis.title.y=element_text(size=8),  # Y axis title
+              axis.text.x=element_text(size=6,
+                                       vjust=.5),  # X axis text
+              axis.text.y=element_text(size=6),
+              legend.title = element_blank(),
+              legend.position = "none",
+              plot.caption = element_text(size = 8)) + # Y axis text
+              ggsave(paste0(path_ch3, "count-byDay.png"), dpi = "retina", width = 10, height = 8, units = "cm")
 ```
 
 As we can see above, our data presents strong patterns (seasonality). By doing a Fourier Transform, it is possible get to know what are the main frequencies of this time series.
 
 ```{r}
-signal_INPE <- df %>% 
+signal_INPE <- data %>% 
   mutate(date = date(datahora)) %>% 
   group_by(date) %>%
   summarise(n = n())
 
-p <- periodogram(signal_INPE$n)
+p <- periodogram(signal_INPE$n, ylab = "Periodograma", xlab = "Frequência", lwd = 1.5)
 
 dd = data.frame(freq=p$freq, spec=p$spec)
 order = dd[order(-dd$spec),]
@@ -464,6 +516,34 @@ top3
 time <- 1/top3$freq
 time
 ```
+
+```{r}
+
+freqs <- dd %>% arrange(desc(dd$spec)) %>% filter(freq <= 0.1)
+
+freqs %>% ggplot(mapping = aes(x = freq, y = spec)) +
+  geom_bar(stat = "identity") +
+  labs(y = "Potência", x = "Frequência (Hz)", title = 'Densidade Espectral de Potência',      caption="Fonte: Elaborado pelo Autor") +
+  theme(plot.title=element_text(size=10, 
+                                      face="bold", 
+                                      family="Arial",
+                                      hjust=0.5,
+                                      lineheight=1.2),  # title
+              plot.subtitle=element_text(size=10, 
+                                         family="Arial",
+                                         face="bold",
+                                         hjust=0.5),  # subtitle
+              axis.title.x=element_text(size=8),  # X axis title
+              axis.title.y=element_text(size=8),  # Y axis title
+              axis.text.x=element_text(size=6,
+                                       vjust=.5),  # X axis text
+              axis.text.y=element_text(size=6),
+              legend.title = element_blank(),
+              legend.position = "none",
+              plot.caption = element_text(size = 8)) + # Y axis text
+              ggsave(paste0(path_ch3, "psd.png"), dpi = "retina", width = 10, height = 8, units = "cm")
+```
+
 
 Therefore, the seasonality of our dataset is given by annualy, semesterly and quaterly periods. For reference, see https://anomaly.io/detect-seasonality-using-fourier-transform-r/index.html and http://www.di.fc.ul.pt/~jpn/r/fourier/fourier.html
 
