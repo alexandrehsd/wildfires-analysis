@@ -844,7 +844,7 @@ data_partial <- data %>%
   mutate(ano = year(datahora))
 ```
 
-In addition, let's focus on the legal amazon area.
+In addition, let's focus on the legal amazon area
 
 ```{r}
 shape <- read_sf(dsn = "./geo_data/legal_amazon_simple", layer = "UF_AMLeg_LLwgs84_Simple")
@@ -1175,14 +1175,55 @@ accum_frp_nasa %>% ggplot(aes(x = acq_date, y = cum_frp/1000000)) +
   scale_x_date(date_breaks = "4 months", date_labels = "%b/%y")
 ```
 
-------------------------- SPATIAL ANALYSIS
+The result for FIRMS corroborate with those from INPE.
 
 ```{r}
-ggplot()
+
+month_factor <- factor(c("Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"),
+                       levels = c("Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"))
+
+firms_outlier <-
+  firms %>% 
+  mutate(outlier = frp > median(frp) + IQR(frp) * 1.5,
+         month_name = month_factor[month(acq_date)])
+
+
+firms_outlier %>% 
+  ggplot(aes(x = month_name, y = log(frp), group = factor(month(acq_date)))) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_point(data = function(x) dplyr::filter_(firms_outlier, ~ outlier), position = 'jitter', size = 1/100, alpha = 1/15)  +
+  labs(title="Boxplot de Poder Radiativo de Fogo", subtitle = "para cada mês do ano", y="Poder radiativo emitido log(MW)", x= "Mês", caption="Fonte: Elaborado pelo Autor") +
+    theme(plot.title=element_text(size=10, 
+                                      face="bold", 
+                                      family="Arial",
+                                      hjust=0.5,
+                                      lineheight=1.2),  # title
+              plot.subtitle=element_text(size=8, 
+                                         family="Arial",
+                                         face="bold",
+                                         hjust=0.5),  # subtitle
+              axis.title.x=element_text(size=8),  # X axis title
+              axis.title.y=element_text(size=8),  # Y axis title
+              axis.text.x=element_text(size=5,
+                                       vjust=.5),  # X axis text
+              axis.text.y=element_text(size=4),
+              legend.title = element_blank(),
+              legend.text = element_blank(),
+              legend.position = "none",
+              plot.caption = element_text(size = 6)) +  # Y axis text
+              ggsave(paste0(path_ch4, "bosplot-frp.png"), dpi = "retina", width = 12, height = 8, units = "cm")
 ```
 
 
-The result for FIRMS corroborate with those from INPE.
+```{r}
+firms %>% 
+  ggplot() +
+  geom_density(aes(x = brightness, alpha = 0.5)) +
+  geom_density(aes(x = bright_t31, alpha = 0.5)) +
+  # scale_color_manual(values = cbp1) +
+  scale_fill_manual(values = cbp1)
+```
+
 
 One thing that we do not see until this point was the average fire radiative power along the days of the year. However, as we have many extreme cases, i.e., outliers, we are gonna remove them before plotting the statistics
 
