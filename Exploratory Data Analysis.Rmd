@@ -14,6 +14,7 @@ library(lubridate) # date manipulation
 library(dplyr) # data manipulation
 library(tidyr) # data manipulation
 library(ggplot2) # graphics
+library(directlabels) # End lines legend for ggplot line plots
 library(plotly) # Interactive graphics
 library(stringr) # string manipulation
 library(stringi) # remove diacritics
@@ -556,7 +557,7 @@ sample <- sample_frac(data, 0.25)
 
 data %>% 
   select(riscofogo, diasemchuva, precipitacao) %>% 
-  filter(sample$diasemchuva != 0, sample$riscofogo != 0, sample$precipitacao != 0) %>% 
+  filter(data$diasemchuva != 0, data$riscofogo != 0, data$precipitacao != 0) %>% 
 ggplot(aes(x=riscofogo, y=precipitacao) ) +
   stat_density_2d(aes(fill = ..density..), geom = "raster", contour = F) +
   scale_fill_distiller(palette=1, direction=1) +
@@ -728,7 +729,7 @@ As we can see, in 2019 the trend was a bit different, maybe it is so because of 
 Strangely, our dataset only has records of fire occurences from 3 to 6 pm. Why is it?
 
 ```{r}
-df %>% 
+data %>% 
   mutate(hour = hour(datahora)) %>% 
   group_by(hour) %>% 
   ggplot(aes(x = hour, group = 1)) +
@@ -755,8 +756,8 @@ for(i in 1:n_reg){
 names(regionsList) <- c("NORTE", "NORDESTE", "SUDESTE", "CENTRO-OESTE", "SUL")
 
 for(i in 1:n_reg){
-  df$macroRegiao[df$estado %in% regionsList[[i]]] <- names(regionsList)[i]
-  df$codMacroRegiao[df$estado %in% regionsList[[i]]] <- codMacroRegions[[i]]
+  data$macroRegiao[data$estado %in% regionsList[[i]]] <- names(regionsList)[i]
+  data$codMacroRegiao[data$estado %in% regionsList[[i]]] <- codMacroRegions[[i]]
 }
 ```
 
@@ -764,7 +765,7 @@ for(i in 1:n_reg){
 
 # O nome regiao do dataframe map_df nao tem o mesmo sentido que no dataframe df
 # sendo assim, criou-se um dataframe auxiliar com os nomes correspondentes
-temp <- df[,c("macroRegiao", "codMacroRegiao")]
+temp <- data[,c("macroRegiao", "codMacroRegiao")]
 names(temp) <- c("macroregiao", "regiao")
 
 temp %>% 
@@ -782,24 +783,25 @@ temp %>%
 
 
 ```{r}
-na.omit(df) %>% ggplot(aes(x = frp, y = precipitacao, alpha = riscofogo)) +
-  geom_point()
+na.omit(data) %>% ggplot(aes(x = frp, y = precipitacao, alpha = riscofogo)) +
+  geom_point() +
+  xlim(0,500)
 
-na.omit(df) %>% ggplot(aes(x = log(frp), y = precipitacao, alpha = riscofogo)) +
+na.omit(data) %>% ggplot(aes(x = log(frp), y = precipitacao, alpha = riscofogo)) +
   geom_point()
 ```
 
 Notice the relationship among the fire radiative power, the precipitation and the risk of fire. It seems that, with more precipitation, the frp is reduced while with less precipitation the risk of fire remains mostly
 
 ```{r}
-na.omit(df) %>% ggplot(aes(x = riscofogo, y = precipitacao, alpha = frp)) +
+na.omit(data) %>% ggplot(aes(x = riscofogo, y = precipitacao, alpha = frp)) +
   geom_point(position = "jitter")
 ```
 
 Looking at the distribution of the fire radiative power across different biomas, we can see that it is roughly the same, except for Mata Atlantica and Pampa maybe because Pampa is situated at the south brazil, where temperatures are lower which decreases the chances of fire ocurrences. On the other side, Mata Atlantica is mostly distributed along the coast, implying that the humidity that comes from the ocean may hold fire ocurrences from stroke.
 
 ```{r}
-na.omit(df) %>% ggplot(aes(x = bioma, y = log(frp))) +
+na.omit(data) %>% ggplot(aes(x = bioma, y = frp)) +
   geom_boxplot()
 ```
 
@@ -809,7 +811,7 @@ na.omit(df) %>% ggplot(aes(x = bioma, y = log(frp))) +
 cbp1 <- c("#D55E00", "#E69F00", "#56B4E9", "#009E73",
           "#F0E442", "#0072B2", "#999999", "#CC79A7")
 
-na.omit(df) %>% ggplot(aes(x = log(frp), col = bioma, fill = bioma)) +
+na.omit(data) %>% ggplot(aes(x = log(frp), col = bioma, fill = bioma)) +
   geom_density(alpha = 0.1) +
   scale_color_manual(values = cbp1) +
   scale_fill_manual(values = cbp1)
@@ -819,7 +821,7 @@ na.omit(df) %>% ggplot(aes(x = log(frp), col = bioma, fill = bioma)) +
 As we can see below, we cannot take any conclusion about the risk of fire with respect to the fire radiative power. So sad.
 
 ```{r}
-na.omit(df) %>% 
+na.omit(data) %>% 
   ggplot(aes(x = riscofogo, y = log(frp), col = bioma)) +
     geom_point() + # Copy from Plot 1
     geom_smooth(method = "lm", se = TRUE) +
@@ -829,9 +831,9 @@ na.omit(df) %>%
 
 
 ```{r}
-data19 <- df %>% filter(year(datahora) == '2019')
+data19 <- data %>% filter(year(datahora) == '2019')
 
-df %>% 
+data %>% 
   select(estado) %>% 
   group_by(estado) %>% 
   summarise(n = n()) %>% 
@@ -844,9 +846,9 @@ df %>%
 ```
 
 ```{r}
-data_yearly <- df %>% mutate(ano = year(datahora)) %>% group_by(estado, ano)
+data_yearly <- data %>% mutate(ano = year(datahora)) %>% group_by(estado, ano)
 
-df %>%
+data %>%
   select(estado, datahora) %>%
   mutate(ano = year(datahora)) %>%
   group_by(estado, ano) %>% 
@@ -863,7 +865,7 @@ df %>%
 What about cumulative sums?
 
 ```{r}
-accum_fires_inpe <- df %>%
+accum_fires_inpe <- data %>%
   mutate(data = date(datahora),
          ano = year(datahora)) %>% 
   select(ano, data) %>% 
@@ -952,6 +954,7 @@ The filtered data corresponds to 78.3% of the whole dataset. By the summary stat
 
 ```{r}
 firms[,c("scan", "track", "satellite", "instrument", "version", "type")] <- NULL
+head(firms)
 ```
 
 Let's a plot like the acummulated fires vs day of the year, and also accumulated frp vs day of the year
@@ -1060,39 +1063,20 @@ accum_frp_nasa %>% ggplot(aes(x = acq_date, y = cum_frp/1000000)) +
   scale_x_date(date_breaks = "4 months", date_labels = "%b/%y")
 ```
 
-```{r}
-splitted <- accum_frp_nasa %>% select(acq_year, day_year, cum_frp)
-
-# Using `do` function to replace NAs values with the last records value
-tidy <- splitted %>% spread(key = acq_year, value = cum_frp) %>% do(zoo::na.locf(.))
-tidy$`2019`[273:nrow(tidy)] <- NA
-tidy <- tidy %>% 
-  gather("2015", "2016", "2017", "2018", "2019", key = "acq_year", "value" = frp)
-```
-
-```{r}
-tidy %>% 
-  ggplot(aes(x = day_year, y = frp / 1000000, col = acq_year)) +
-  geom_line() +
-  scale_color_manual(values = c("grey", "grey", "grey", "grey", "red")) +
-  scale_x_continuous("Day of the year", breaks = seq(from = 0, to = 366, by = 50)) +
-  scale_y_continuous("Fire Radiative power in millions")
-```
-
-The result for MODIS corroborate with those from INPE.
+The result for FIRMS corroborate with those from INPE.
 
 One thing that we do not see until this point was the average fire radiative power along the days of the year. However, as we have many extreme cases, i.e., outliers, we are gonna remove them before plotting the statistics
 
 ```{r}
 
-q1 <- quantile(modis$frp, .25)
-q3 <- quantile(modis$frp, .75)
-iqr <- IQR(modis$frp)
+q1 <- quantile(firms$frp, .25)
+q3 <- quantile(firms$frp, .75)
+iqr <- IQR(firms$frp)
 
 mild_low <- q1 - 1.5 * iqr
 mild_high <- q3 + 1.5 * iqr
 
-clean_modis <- modis[modis$frp > mild_low & modis$frp < mild_high, ] #rows
+clean_modis <- firms[firms$frp > mild_low & firms$frp < mild_high, ] #rows
 
 mean_frp_nasa <- clean_modis %>%
   mutate(acq_year = year(acq_date),
@@ -1163,7 +1147,7 @@ legal_amazon_INPE %>% ggplot(aes(x = longitude, y = latitude)) +
 
 
 ```{r}
-df %>% 
+data %>% 
   select(estado) %>% 
   group_by(estado) %>% 
   summarise(n = n()) %>% 
