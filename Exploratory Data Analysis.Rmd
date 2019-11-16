@@ -938,27 +938,26 @@ nasaModis2$version <- as.numeric(nasaModis2$version)
 
 nasaModis <- bind_rows(nasaModis1, nasaModis2)
 
-modis <- nasaModis %>% 
+firms <- nasaModis %>% 
   filter(confidence > 50)
 ```
 
 the acq_date variable is of type factor, it needs to be converted to a standard date type;
 
 ```{r}
-modis$acq_date <- as.Date(modis$acq_date) 
+firms$acq_date <- as.Date(firms$acq_date) 
 ```
 
-
-The filtered data corresponds to 78.3% of the hole dataset. By the summary statistics of the data, we clearly don't need the columns satellite, instrument, version and type. In addition, the scan and track columns do not provide us with useful information. Hence, they will also be forget.
+The filtered data corresponds to 78.3% of the whole dataset. By the summary statistics of the data, we clearly don't need the columns satellite, instrument, version and type. In addition, the scan and track columns do not provide us with useful information. Hence, they will also be forget.
 
 ```{r}
-modis[,c("scan", "track", "satellite", "instrument", "version", "type")] <- NULL
+firms[,c("scan", "track", "satellite", "instrument", "version", "type")] <- NULL
 ```
 
 Let's a plot like the acummulated fires vs day of the year, and also accumulated frp vs day of the year
 
 ```{r}
-accum_fires_nasa <- modis %>%
+accum_fires_nasa <- firms %>%
   mutate(acq_year = year(acq_date)) %>% 
   select(acq_year, acq_date) %>% 
   group_by(acq_year, acq_date) %>% 
@@ -968,9 +967,32 @@ accum_fires_nasa <- modis %>%
 ```
 
 ```{r}
-accum_fires_nasa %>% ggplot(aes(x = acq_date, y = cum_sum)) +
+accum_fires_nasa %>% ggplot(aes(x = acq_date, y = cum_sum / 1000)) +
   geom_line() +
-  scale_x_date(date_breaks = "4 months", date_labels = "%b/%y")
+  scale_x_date(date_breaks = "4 months", date_labels = "%b/%y") +
+  labs(title="Curva cumulativa de incêndios por dia", y="Quantidade acumulada de incêndios (milhares)", x= "Mês/Ano", caption="Fonte: Elaborado pelo Autor") +
+    theme(plot.title=element_text(size=10, 
+                                      face="bold", 
+                                      family="Arial",
+                                      hjust=0.5,
+                                      lineheight=1.2),  # title
+              plot.subtitle=element_text(size=8, 
+                                         family="Arial",
+                                         face="bold",
+                                         hjust=0.5),  # subtitle
+              axis.title.x=element_text(size=8),  # X axis title
+              axis.title.y=element_text(size=8),  # Y axis title
+              axis.text.x=element_text(size=5,
+                                       vjust=.5),  # X axis text
+              axis.text.y=element_text(size=4),
+              # legend.title = element_blank(),
+              legend.text = element_text(size = 4),
+              legend.justification=c(0, 1), 
+              legend.key.width= unit(0.6, "lines"), 
+              legend.key.height = unit(0.6, "lines"),
+              legend.position = c(0.9, 0.6),
+              plot.caption = element_text(size = 6))  +# Y axis text
+              ggsave(paste0(path_ch4, "cumulativeFire.png"), dpi = "retina", width = 12, height = 8, units = "cm")
 ```
 
 Wrangling data to plot accumulated fires vs day of the year
@@ -988,18 +1010,42 @@ tidy <- tidy %>%
 
 
 ```{r}
+
 tidy %>% 
   ggplot(aes(x = day_year, y = fires / 1000, col = acq_year)) +
-  geom_line() +
-  scale_color_manual(values = c("grey", "grey", "grey", "grey", "red")) +
-  scale_x_continuous("Day of the year", breaks = seq(from = 0, to = 366, by = 50)) +
-  scale_y_continuous("Number of fires in thousands")
+  geom_line(size = .7, alpha = .8) +
+  scale_color_manual(values = c("#ff4949", "#ff9c49", "#ff6549", "#ffb749", "#300836")) +
+  scale_x_continuous(breaks = seq(from = 0, to = 366, by = 50)) +
+  geom_dl(aes(label = acq_year), method = list(dl.combine("last.points"), cex = 0.5, hjust = .6, vjust = -.8)) +
+  labs(title="Curva cumulativa de poder radiativo de fogo emitido", subtitle = "por dia do ano", y="Poder radiativo emitido acumulado (gigawatt)", x= "Dia do ano", caption="Fonte: Elaborado pelo Autor") +
+    theme(plot.title=element_text(size=10, 
+                                      face="bold", 
+                                      family="Arial",
+                                      hjust=0.5,
+                                      lineheight=1.2),  # title
+              plot.subtitle=element_text(size=8, 
+                                         family="Arial",
+                                         face="bold",
+                                         hjust=0.5),  # subtitle
+              axis.title.x=element_text(size=8),  # X axis title
+              axis.title.y=element_text(size=8),  # Y axis title
+              axis.text.x=element_text(size=5,
+                                       vjust=.5),  # X axis text
+              axis.text.y=element_text(size=4),
+              legend.title = element_blank(),
+              legend.text = element_blank(),
+              legend.justification=c(0, 1), 
+              legend.key.width= unit(0.6, "lines"), 
+              legend.key.height = unit(0.6, "lines"),
+              legend.position = "none",
+              plot.caption = element_text(size = 6)) + # Y axis text
+              ggsave(paste0(path_ch4, "frpbyDay.png"), dpi = "retina", width = 12, height = 8, units = "cm")
 ```
 
 Now let's wrap over the frp variable
 
 ```{r}
-accum_frp_nasa <- modis %>%
+accum_frp_nasa <- firms %>%
   mutate(acq_year = year(acq_date)) %>% 
   select(acq_year, acq_date, frp) %>% 
   group_by(acq_year, acq_date) %>% 
