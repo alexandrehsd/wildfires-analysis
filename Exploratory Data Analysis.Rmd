@@ -828,10 +828,68 @@ na.omit(data) %>%
     geom_smooth(aes(group = 1), method = "lm", se = TRUE, linetype = 2) 
 ```
 
+One thing we did not show yet was the geographical distribution of fire points through the years. Put on your belts and enjoy the folowing two plots!
+
+```{r}
+# Segmenting Data To plot accordingly to the period available for 2019
+data15 <- data %>% filter(year(datahora) == '2015')
+data16 <- data %>% filter(year(datahora) == '2016')
+data17 <- data %>% filter(year(datahora) == '2017')
+data18 <- data %>% filter(year(datahora) == '2018')
+data19 <- data %>% filter(year(datahora) == '2019')
+
+data_partial <- data %>% 
+  filter(month(datahora) >= 1,
+         month(datahora) <= 9) %>% 
+  mutate(ano = year(datahora))
+```
+
+In addition, let's focus on the legal amazon area.
+
+```{r}
+shape <- read_sf(dsn = "./geo_data/legal_amazon_simple", layer = "UF_AMLeg_LLwgs84_Simple")
+
+# Shapefile of amazon legal area can also be obtained at http://www.dpi.inpe.br/Ambdata/unidades_administrativas.php
+
+shapeINPE <- read_sf(dsn = "./geo_data/AmLeg_LLwgs84", layer = "amazlegal")
+```
+
+```{r}
+legal_amazon <- as.data.frame(shape$geometry[[1]][[1]])
+names(legal_amazon) <- c("longitude", "latitude")
+
+legal_amazon_INPE <- as.data.frame(shapeINPE$geometry[[1]][[1]][[1]])
+names(legal_amazon_INPE) <- c("longitude", "latitude")
+
+legal_amazon %>% ggplot(aes(x = longitude, y = latitude)) +
+  geom_polygon()
+
+legal_amazon_INPE %>% ggplot(aes(x = longitude, y = latitude)) +
+  geom_polygon()
+
+# To see if a point is inside a polygon
+# point.in.polygon(-60, -5, shape$geometry[[1]][[1]][,1], shape$geometry[[1]][[1]][,2])
+```
+
+How much of the dataset is inside the legal amazon area (from january to september)
+
+```{r}
+
+dfs <- list(data15, data16, data17, data18, data19)
+scores <- c()
+for (i in 1:5) {
+  scores[i] <- paste("Observations detected inside the legal amazon in", unique(year(dfs[[i]]$datahora)), "are",
+      round(sum(point.in.polygon(dfs[[i]]$longitude, dfs[[i]]$latitude, shape$geometry[[1]][[1]][,1], shape$geometry[[1]][[1]][,2])) / nrow(dfs[[i]]), 2))
+}
+writeLines(scores)
+
+rm(dfs)
+rm(scores)
+```
 
 
 ```{r}
-data19 <- data %>% filter(year(datahora) == '2019')
+# Only for 2019
 
 data %>% 
   select(estado) %>% 
@@ -840,26 +898,80 @@ data %>%
   right_join(map_df, by = 'estado') %>% 
   ggplot(aes(x = longitude, y = latitude, group = codigo)) + 
     geom_polygon() + 
-    geom_point(inherit.aes = F, data = data19, aes(x = longitude, y = latitude, col = bioma), size = 0.1, shape = 3) +
+    geom_point(inherit.aes = F, data = data19, aes(x = longitude, y = latitude, col = bioma), size = 0.1, shape = 21, alpha = 1/20) +
     scale_color_manual(values = cbp1) +
-    geom_path(color = 'white', size = 0.1)
+    geom_path(color = 'white', size = 0.1) +
+    geom_path(inherit.aes = F, data = legal_amazon_INPE, mapping = aes(x = longitude, y = latitude), color = "yellow") +
+    geom_dl(aes(label = "Amazônia Legal"), method = list(dl.combine("last.points"), cex = 0.6, hjust = 3, vjust = -14)) +
+  guides(colour = guide_legend(title = "Bioma", override.aes = list(alpha = 1))) +
+    # facet_wrap(~ano) +
+  labs(title = 'Distribuição espacial de focos de incêndios', subtitle = "Entre Janeiro e Setembro de 2019", caption="Fonte: Elaborado pelo Autor" ) +
+    theme(plot.title=element_text(size=9, 
+                                      face="bold", 
+                                      family="Arial",
+                                      hjust=0.5,
+                                      lineheight=1.2),  # title
+              plot.subtitle=element_text(size=7, 
+                                         family="Arial",
+                                         face="bold",
+                                         hjust=0.5),  # subtitle
+              axis.title = element_blank(),
+              axis.text = element_blank(), 
+              axis.ticks = element_blank(),
+              legend.position=c(0.1, 0.45), 
+              legend.justification=c(0, 1), 
+              legend.key.width= unit(0.6, "lines"), 
+              legend.key.height = unit(0.6, "lines"),
+              legend.title = element_text(size = 7),
+              legend.text = element_text(size = 5),
+              plot.caption = element_text(size = 6)) 
+                # ggsave(paste0(path_ch4, "amazon2019.png"), dpi = "retina", width = 10, height = 8, units = "cm")
+rm(data19)
 ```
 
-```{r}
-data_yearly <- data %>% mutate(ano = year(datahora)) %>% group_by(estado, ano)
 
-data %>%
-  select(estado, datahora) %>%
-  mutate(ano = year(datahora)) %>%
-  group_by(estado, ano) %>% 
+It is worth noting not only the distribution of point occurrences in 2019 but also through all years involved in the analysis process
+
+```{r}
+# For all years
+
+data %>% 
+  select(estado) %>% 
+  group_by(estado) %>% 
   summarise(n = n()) %>% 
-  right_join(map_df, by = 'estado') %>%
-  ggplot(aes(x = longitude, y = latitude, group = codigo)) +
-    geom_polygon() +
-    geom_point(inherit.aes = F, data = data_yearly, aes(x = longitude, y = latitude, col = bioma), size = 0.05, shape = 3) +
+  right_join(map_df, by = 'estado') %>% 
+  ggplot(aes(x = longitude, y = latitude, group = codigo)) + 
+    geom_polygon() + 
+    geom_point(inherit.aes = F, data = data_partial, aes(x = longitude, y = latitude, col = bioma), size = 0.01, shape = 21, alpha = 1/50) +
     scale_color_manual(values = cbp1) +
+    geom_path(color = 'white', size = 0.1) +
+    geom_path(inherit.aes = F, data = legal_amazon_INPE, mapping = aes(x = longitude, y = latitude), color = "yellow") +
+    geom_dl(aes(label = "Amazônia Legal"), method = list(dl.combine("last.points"), cex = 0.6, hjust = 3, vjust = -14)) +
+  guides(colour = guide_legend(title = "Bioma", override.aes = list(alpha = 1))) +
     facet_wrap(~ano) +
-    geom_path(color = 'white', size = 0.1)
+  labs(title = 'Distribuição espacial de focos de incêndios', subtitle = "Entre Janeiro e Setembro", caption="Fonte: Elaborado pelo Autor" ) +
+    theme(plot.title=element_text(size=9, 
+                                      face="bold", 
+                                      family="Arial",
+                                      hjust=0.5,
+                                      lineheight=1.2),  # title
+              plot.subtitle=element_text(size=7, 
+                                         family="Arial",
+                                         face="bold",
+                                         hjust=0.5),  # subtitle
+              axis.title = element_blank(),
+              axis.text = element_blank(), 
+              axis.ticks = element_blank(),
+              legend.position=c(0.7, 0.5),  
+              legend.justification=c(0, 1), 
+              legend.key.width= unit(0.6, "lines"), 
+              legend.key.height = unit(0.6, "lines"),
+              legend.title = element_text(size = 7),
+              legend.text = element_text(size = 5),
+              plot.caption = element_text(size = 6)) 
+                # ggsave(paste0(path_ch4, "amazon-allYears.png"), dpi = "retina", width = 10, height = 8, units = "cm")
+
+rm(data_partial)
 ```
 
 What about cumulative sums?
@@ -1063,6 +1175,13 @@ accum_frp_nasa %>% ggplot(aes(x = acq_date, y = cum_frp/1000000)) +
   scale_x_date(date_breaks = "4 months", date_labels = "%b/%y")
 ```
 
+------------------------- SPATIAL ANALYSIS
+
+```{r}
+ggplot()
+```
+
+
 The result for FIRMS corroborate with those from INPE.
 
 One thing that we do not see until this point was the average fire radiative power along the days of the year. However, as we have many extreme cases, i.e., outliers, we are gonna remove them before plotting the statistics
@@ -1119,47 +1238,6 @@ this graph shows that there 9s a strong seasonality in the mean of the fire radi
 Let's investigate the fires of the Amazonia during the fire season:
 
 Cumulative active fire detections from May 1st through October 1st from MODIS (Aqua + Terra) and VIIRS (SNPP) show that fire detections in 2019 have fallen below cumulative levels of fire activity detected in 2012 (the start of the VIIRS record) and 2017 across the Legal Amazon. Through the end of September, fires in 2019 were more intense than any year since 2012, measured in terms of fire radiative power, consistent with the observed increase in deforestation this year.
-
-```{r}
-shape <- read_sf(dsn = "./geo_data/legal_amazon_simple", layer = "UF_AMLeg_LLwgs84_Simple")
-
-# Shapefile of amazon legal area can also be obtained at http://www.dpi.inpe.br/Ambdata/unidades_administrativas.php
-
-shapeINPE <- read_sf(dsn = "./geo_data/AmLeg_LLwgs84", layer = "amazlegal")
-```
-
-```{r}
-legal_amazon <- as.data.frame(shape$geometry[[1]][[1]])
-names(legal_amazon) <- c("longitude", "latitude")
-
-legal_amazon_INPE <- as.data.frame(shapeINPE$geometry[[1]][[1]][[1]])
-names(legal_amazon_INPE) <- c("longitude", "latitude")
-
-legal_amazon %>% ggplot(aes(x = longitude, y = latitude)) +
-  geom_polygon()
-
-legal_amazon_INPE %>% ggplot(aes(x = longitude, y = latitude)) +
-  geom_polygon()
-
-# To see if a point is inside a polygon
-# point.in.polygon(-60, -5, shape$geometry[[1]][[1]][,1], shape$geometry[[1]][[1]][,2])
-```
-
-
-```{r}
-data %>% 
-  select(estado) %>% 
-  group_by(estado) %>% 
-  summarise(n = n()) %>% 
-  right_join(map_df, by = 'estado') %>% 
-  ggplot(aes(x = longitude, y = latitude, group = codigo)) + 
-    geom_polygon() + 
-    geom_point(inherit.aes = F, data = data19, aes(x = longitude, y = latitude, col = bioma), size = 0.1, shape = 3) +
-    scale_color_manual(values = cbp1) +
-    geom_path(color = 'white', size = 0.1) +
-  geom_path(inherit.aes = F, data = legal_amazon_INPE, mapping = aes(x = longitude, y = latitude), color = "yellow")
-```
-
 
 ```{r}
 modis_fcount <- read.csv("./database/legal_amazon_fc_frp_20191001/Table_MODIS_fire_counts_2003_2019.csv")
